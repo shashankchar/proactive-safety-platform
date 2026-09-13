@@ -18,7 +18,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -41,8 +40,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private TextView actionView;
     private TextView factorView;
     private TextView statusView;
-    private EditText serverUrlInput;
-    private EditText olaApiKeyInput;
     private Button monitorButton;
     private boolean monitoring = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -122,8 +119,9 @@ public class MainActivity extends android.app.Activity implements LocationListen
         TextView title = text("PROACTIVE SAFETY", 22, Color.WHITE, true);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView connectionDot = text("LIVE", 12, Color.rgb(90, 211, 157), true);
-        header.addView(connectionDot);
+        Button settingsButton = smallButton("Settings");
+        settingsButton.setOnClickListener(view -> showSettingsDialog());
+        header.addView(settingsButton);
         root.addView(text("Live GPS + app-to-app cooperative safety", 13, Color.rgb(167, 198, 186), false));
 
         realMapView = new RealMapView(this);
@@ -133,50 +131,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
         );
         mapParams.setMargins(0, dp(12), 0, dp(10));
         root.addView(realMapView, mapParams);
-
-        serverUrlInput = new EditText(this);
-        serverUrlInput.setText(CooperativeSafetyClient.serverUrl(this));
-        serverUrlInput.setTextColor(Color.WHITE);
-        serverUrlInput.setHintTextColor(Color.rgb(167, 198, 186));
-        serverUrlInput.setTextSize(13);
-        serverUrlInput.setSingleLine(true);
-        serverUrlInput.setHint("Backend URL");
-        serverUrlInput.setBackgroundColor(Color.rgb(16, 35, 29));
-        serverUrlInput.setPadding(16, 8, 16, 8);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        inputParams.setMargins(0, 8, 0, 0);
-        serverUrlInput.setLayoutParams(inputParams);
-        root.addView(serverUrlInput);
-
-        Button saveServerButton = button("Save Backend URL", Color.rgb(255, 204, 77), 54);
-        saveServerButton.setOnClickListener(view -> {
-            CooperativeSafetyClient.saveServerUrl(this, serverUrlInput.getText().toString());
-            statusView.setText("Checking backend: " + CooperativeSafetyClient.serverUrl(this));
-            testBackendConnection();
-        });
-        root.addView(saveServerButton);
-
-        olaApiKeyInput = new EditText(this);
-        olaApiKeyInput.setText(CooperativeSafetyClient.olaApiKey(this));
-        olaApiKeyInput.setTextColor(Color.WHITE);
-        olaApiKeyInput.setHintTextColor(Color.rgb(167, 198, 186));
-        olaApiKeyInput.setTextSize(13);
-        olaApiKeyInput.setSingleLine(true);
-        olaApiKeyInput.setHint("Ola Maps API Key");
-        olaApiKeyInput.setBackgroundColor(Color.rgb(16, 35, 29));
-        olaApiKeyInput.setPadding(16, 8, 16, 8);
-        root.addView(olaApiKeyInput);
-
-        Button saveOlaButton = button("Save Ola Maps Key", Color.rgb(255, 204, 77), 50);
-        saveOlaButton.setOnClickListener(view -> {
-            CooperativeSafetyClient.saveOlaApiKey(this, olaApiKeyInput.getText().toString());
-            statusView.setText("Ola Maps key saved. Reloading map.");
-            if (realMapView != null) realMapView.reloadMap();
-        });
-        root.addView(saveOlaButton);
 
         levelView = compactHero("LOW", Color.rgb(90, 211, 157));
         root.addView(levelView);
@@ -288,6 +242,23 @@ public class MainActivity extends android.app.Activity implements LocationListen
         return button;
     }
 
+    private Button smallButton(String label) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.rgb(6, 32, 25));
+        button.setTextSize(12);
+        button.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        button.setBackgroundColor(Color.rgb(255, 204, 77));
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setPadding(dp(10), 0, dp(10), 0);
+        button.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(38)
+        ));
+        return button;
+    }
+
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -303,6 +274,45 @@ public class MainActivity extends android.app.Activity implements LocationListen
         int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
         if (resourceId > 0) return getResources().getDimensionPixelSize(resourceId);
         return dp(24);
+    }
+
+    private void showSettingsDialog() {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dp(4), dp(6), dp(4), 0);
+
+        EditText serverInput = dialogInput("Backend URL", CooperativeSafetyClient.serverUrl(this));
+        EditText olaInput = dialogInput("Ola Maps API Key", CooperativeSafetyClient.olaApiKey(this));
+        container.addView(serverInput);
+        container.addView(olaInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle("App Settings")
+                .setView(container)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    CooperativeSafetyClient.saveServerUrl(this, serverInput.getText().toString());
+                    CooperativeSafetyClient.saveOlaApiKey(this, olaInput.getText().toString());
+                    statusView.setText("Settings saved. Checking backend.");
+                    if (realMapView != null) realMapView.reloadMap();
+                    testBackendConnection();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private EditText dialogInput(String hint, String value) {
+        EditText input = new EditText(this);
+        input.setText(value);
+        input.setHint(hint);
+        input.setSingleLine(true);
+        input.setTextSize(14);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, 0, 0, dp(10));
+        input.setLayoutParams(params);
+        return input;
     }
 
     private void toggleMonitoring() {
