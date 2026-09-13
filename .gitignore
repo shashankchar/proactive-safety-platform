@@ -6,6 +6,8 @@ android-app/build/
 android-app/app/build/
 android-app/manual-build/
 
+!dist/
+
 *.class
 *.apk.idsig
 
