@@ -30,6 +30,9 @@ public class RealMapView extends WebView {
         settings.setDomStorageEnabled(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
         setBackgroundColor(0xff07130f);
         setWebViewClient(new android.webkit.WebViewClient() {
             @Override
@@ -40,6 +43,11 @@ public class RealMapView extends WebView {
                 }
             }
         });
+    }
+
+    public void reloadMap() {
+        loaded = false;
+        loadDataWithBaseURL("https://maps.olakrutrim.com/", html(), "text/html", "UTF-8", null);
     }
 
     public void update(Location location, SafetyAssessment assessment, CooperativeAlert alert, boolean monitoring) {
@@ -89,31 +97,33 @@ public class RealMapView extends WebView {
     }
 
     private String html() {
+        String olaApiKey = CooperativeSafetyClient.olaApiKey(getContext());
         return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
-                "<link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'>" +
                 "<style>" +
-                "html,body,#map{height:100%;margin:0;background:#07130f;font-family:Arial,sans-serif;}" +
-                ".leaflet-control-attribution{display:none}" +
-                ".hud{position:absolute;left:12px;right:12px;top:12px;z-index:999;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;color:white}" +
-                ".level{font-weight:900;font-size:24px;color:#5ad39d}.sub{font-size:12px;color:#d5eee6;margin-top:2px}" +
-                ".arrow{width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-bottom:38px solid #28a8ff;filter:drop-shadow(0 0 4px #fff)}" +
-                ".other{width:24px;height:24px;border-radius:6px;background:#ff4d4d;border:3px solid white;box-shadow:0 0 0 14px rgba(255,77,77,.25)}" +
-                ".zone{background:rgba(41,199,164,.18);border:2px solid #29c7a4;border-radius:50%}" +
-                "</style></head><body><div id='map'></div><div class='hud'><div id='level' class='level'>LOW</div><div id='subtitle' class='sub'>Waiting for real GPS location</div></div>" +
-                "<script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script>" +
+                "html,body,#map{height:100%;margin:0;background:#07130f;font-family:Arial,sans-serif;overflow:hidden}" +
+                "#map{position:absolute;inset:0}.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#d5eee6;background:linear-gradient(135deg,#07130f,#10231d)}" +
+                ".hud{position:absolute;left:12px;right:12px;top:12px;z-index:4;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;color:white}" +
+                ".level{font-weight:900;font-size:24px;color:#5ad39d}.sub{font-size:12px;color:#d5eee6;margin-top:2px}.provider{position:absolute;right:12px;bottom:10px;z-index:4;color:#d5eee6;font-size:11px;background:rgba(0,0,0,.55);padding:5px 8px;border-radius:8px}" +
+                ".marker{position:absolute;z-index:3;transform:translate(-50%,-50%);pointer-events:none}.arrow{width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:42px solid #28a8ff;filter:drop-shadow(0 0 4px #fff)}" +
+                ".other{width:24px;height:24px;border-radius:6px;background:#ff4d4d;border:3px solid white;box-shadow:0 0 0 16px rgba(255,77,77,.24)}.zone{width:170px;height:170px;border-radius:50%;border:2px solid #29c7a4;background:rgba(41,199,164,.16)}" +
+                ".line{position:absolute;height:4px;background:#ff4d4d;z-index:2;transform-origin:left center;box-shadow:0 0 12px rgba(255,77,77,.9);pointer-events:none}" +
+                "</style></head><body><div id='map'></div><div id='empty' class='empty'>Enter Ola Maps API key<br>then start GPS monitoring</div><div class='hud'><div id='level' class='level'>LOW</div><div id='subtitle' class='sub'>Waiting for real GPS location</div></div><div class='provider'>Ola Maps</div>" +
+                "<div id='user' class='marker'><div class='arrow'></div></div><div id='other' class='marker'><div class='other'></div></div><div id='zone' class='marker'><div class='zone'></div></div><div id='line' class='line'></div>" +
+                "<script src='https://www.unpkg.com/olamaps-web-sdk@latest/dist/olamaps-web-sdk.umd.js'></script>" +
                 "<script>" +
-                "var map=L.map('map',{zoomControl:false}).setView([17.9373,79.8481],16);" +
-                "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);" +
-                "var userIcon=L.divIcon({className:'',html:'<div class=\"arrow\"></div>',iconSize:[32,44],iconAnchor:[16,22]});" +
-                "var otherIcon=L.divIcon({className:'',html:'<div class=\"other\"></div>',iconSize:[30,30],iconAnchor:[15,15]});" +
-                "var user=null,other=null,zone=null,line=null,centered=false;" +
+                "var OLA_API_KEY=" + JSONObject.quote(olaApiKey) + ";" +
+                "var map=null,centered=false,last={},userEl=document.getElementById('user'),otherEl=document.getElementById('other'),zoneEl=document.getElementById('zone'),lineEl=document.getElementById('line'),emptyEl=document.getElementById('empty');" +
+                "userEl.style.display=otherEl.style.display=zoneEl.style.display=lineEl.style.display='none';" +
+                "function setStatus(t){document.getElementById('subtitle').textContent=t;}" +
+                "function project(lat,lng){if(!map||!map.project)return null;var p=map.project([lng,lat]);return {x:p.x,y:p.y};}" +
+                "function place(el,lat,lng){var p=project(lat,lng);if(!p){el.style.display='none';return null;}el.style.left=p.x+'px';el.style.top=p.y+'px';el.style.display='block';return p;}" +
+                "function draw(){if(!last.hasLocation)return;var up=place(userEl,last.lat,last.lng);if(last.heading){userEl.style.transform='translate(-50%,-50%) rotate('+last.heading+'deg)';}else{userEl.style.transform='translate(-50%,-50%)';}if(last.hasZone)place(zoneEl,last.zoneLat,last.zoneLng);else zoneEl.style.display='none';if(last.hasOther){var op=place(otherEl,last.otherLat,last.otherLng);if(up&&op){var dx=op.x-up.x,dy=op.y-up.y,len=Math.sqrt(dx*dx+dy*dy),ang=Math.atan2(dy,dx)*180/Math.PI;lineEl.style.display='block';lineEl.style.left=up.x+'px';lineEl.style.top=up.y+'px';lineEl.style.width=len+'px';lineEl.style.transform='rotate('+ang+'deg)';}}else{otherEl.style.display='none';lineEl.style.display='none';}}" +
+                "async function boot(){if(!OLA_API_KEY){emptyEl.style.display='flex';setStatus('Ola Maps API key required');return;}try{var olaMaps=new OlaMaps({apiKey:OLA_API_KEY});map=await olaMaps.init({style:'https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json',container:'map',center:[79.8481,17.9373],zoom:16});emptyEl.style.display='none';if(map.on){map.on('move',draw);map.on('zoom',draw);}setStatus('Ola map ready. Waiting for GPS.');draw();}catch(e){emptyEl.style.display='flex';emptyEl.innerHTML='Ola map failed to load<br>Check API key and internet';setStatus('Ola map failed');}}" +
                 "window.updateSafetyMap=function(d){document.getElementById('level').textContent=d.level||'LOW';document.getElementById('level').style.color=d.level==='CRITICAL'?'#ff4d4d':d.level==='HIGH'?'#ff914d':d.level==='MEDIUM'?'#ffcc4d':'#5ad39d';" +
-                "document.getElementById('subtitle').textContent=d.hasLocation?('Real map active | '+(d.speedKmh||0)+' km/h'):'Waiting for real GPS location';" +
-                "if(d.hasLocation){var p=[d.lat,d.lng];if(!user){user=L.marker(p,{icon:userIcon}).addTo(map).bindTooltip('You');}else{user.setLatLng(p);}if(!centered){map.setView(p,17);centered=true;}else{map.panTo(p,{animate:true,duration:.4});}}" +
-                "if(d.hasZone){var zp=[d.zoneLat,d.zoneLng];if(!zone){zone=L.circle(zp,{radius:120,color:'#29c7a4',fillColor:'#29c7a4',fillOpacity:.16}).addTo(map).bindTooltip(d.zoneName);}else{zone.setLatLng(zp);}}" +
-                "if(d.hasOther){var op=[d.otherLat,d.otherLng];if(!other){other=L.marker(op,{icon:otherIcon}).addTo(map).bindTooltip('Other app user');}else{other.setLatLng(op);}if(d.hasLocation){if(line)map.removeLayer(line);line=L.polyline([[d.lat,d.lng],op],{color:'#ff4d4d',weight:5,opacity:.85}).addTo(map);}}" +
-                "else{if(other){map.removeLayer(other);other=null;}if(line){map.removeLayer(line);line=null;}}" +
+                "last=d||{};setStatus(d.hasLocation?('Ola live map | '+(d.speedKmh||0)+' km/h'):(OLA_API_KEY?'Waiting for real GPS location':'Ola Maps API key required'));" +
+                "if(map&&d.hasLocation){if(!centered){map.setCenter([d.lng,d.lat]);if(map.setZoom)map.setZoom(17);centered=true;}else if(map.easeTo){map.easeTo({center:[d.lng,d.lat],duration:400});}else{map.setCenter([d.lng,d.lat]);}}draw();" +
                 "};" +
+                "boot();" +
                 "</script></body></html>";
     }
 }

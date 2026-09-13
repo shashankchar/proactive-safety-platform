@@ -19,6 +19,7 @@ import java.util.Locale;
 final class CooperativeSafetyClient {
     static final String PREFS = "proactive_safety";
     static final String KEY_SERVER_URL = "server_url";
+    static final String KEY_OLA_API_KEY = "ola_maps_api_key";
     static final String DEFAULT_SERVER_URL = "https://proactive-safety-backend.shashankcharyaswork.chatgpt.site";
 
     private CooperativeSafetyClient() {
@@ -38,6 +39,19 @@ final class CooperativeSafetyClient {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_SERVER_URL, url)
+                .apply();
+    }
+
+    static String olaApiKey(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return prefs.getString(KEY_OLA_API_KEY, "");
+    }
+
+    static void saveOlaApiKey(Context context, String value) {
+        String apiKey = value == null ? "" : value.trim();
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_OLA_API_KEY, apiKey)
                 .apply();
     }
 

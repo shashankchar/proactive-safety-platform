@@ -42,6 +42,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private TextView factorView;
     private TextView statusView;
     private EditText serverUrlInput;
+    private EditText olaApiKeyInput;
     private Button monitorButton;
     private boolean monitoring = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -121,7 +122,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
         TextView title = text("PROACTIVE SAFETY", 22, Color.WHITE, true);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView connectionDot = text("●", 22, Color.rgb(90, 211, 157), true);
+        TextView connectionDot = text("LIVE", 12, Color.rgb(90, 211, 157), true);
         header.addView(connectionDot);
         root.addView(text("Live GPS + app-to-app cooperative safety", 13, Color.rgb(167, 198, 186), false));
 
@@ -158,6 +159,25 @@ public class MainActivity extends android.app.Activity implements LocationListen
         });
         root.addView(saveServerButton);
 
+        olaApiKeyInput = new EditText(this);
+        olaApiKeyInput.setText(CooperativeSafetyClient.olaApiKey(this));
+        olaApiKeyInput.setTextColor(Color.WHITE);
+        olaApiKeyInput.setHintTextColor(Color.rgb(167, 198, 186));
+        olaApiKeyInput.setTextSize(13);
+        olaApiKeyInput.setSingleLine(true);
+        olaApiKeyInput.setHint("Ola Maps API Key");
+        olaApiKeyInput.setBackgroundColor(Color.rgb(16, 35, 29));
+        olaApiKeyInput.setPadding(16, 8, 16, 8);
+        root.addView(olaApiKeyInput);
+
+        Button saveOlaButton = button("Save Ola Maps Key", Color.rgb(255, 204, 77), 50);
+        saveOlaButton.setOnClickListener(view -> {
+            CooperativeSafetyClient.saveOlaApiKey(this, olaApiKeyInput.getText().toString());
+            statusView.setText("Ola Maps key saved. Reloading map.");
+            if (realMapView != null) realMapView.reloadMap();
+        });
+        root.addView(saveOlaButton);
+
         levelView = compactHero("LOW", Color.rgb(90, 211, 157));
         root.addView(levelView);
 
@@ -185,7 +205,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
         root.addView(factorView);
         root.addView(statusView);
 
-        monitorButton = button("▶  Start GPS Monitoring", Color.rgb(41, 199, 164), 64);
+        monitorButton = button("Start GPS Monitoring", Color.rgb(41, 199, 164), 64);
         monitorButton.setOnClickListener(view -> toggleMonitoring());
         screen.addView(monitorButton);
 
@@ -324,7 +344,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
 
     private void stopMonitoring() {
         monitoring = false;
-        monitorButton.setText("▶  Start GPS Monitoring");
+        monitorButton.setText("Start GPS Monitoring");
         statusView.setText("GPS monitoring stopped.");
         stopService(new Intent(this, SafetyLocationService.class));
         stopLocalUpdates();
