@@ -1,0 +1,17 @@
+{
+  "name": "proactive-safety-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first road, travel, and emergency safety platform prototype.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/risk-engine.test.js && node tests/cooperative-engine.test.js"
+  },
+  "keywords": [
+    "road-safety",
+    "risk-analysis",
+    "emergency",
+    "pwa"
+  ],
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "RZ001",
+    "name": "Highway Cross Junction A",
+    "latitude": 10.0154,
+    "longitude": 76.3419,
+    "riskLevel": "HIGH",
+    "accidentCount": 12,
+    "junctionType": "Four-road cross junction",
+    "visibilityCondition": "Poor night visibility",
+    "roadType": "Highway crossing",
+    "recommendedSpeed": 30,
+    "description": "Unsignalized highway junction with poor lighting and fast cross traffic.",
+    "updatedAt": "2026-09-13T00:00:00.000Z"
+  },
+  {
+    "id": "RZ002",
+    "name": "Market Road Blind Turn",
+    "latitude": 10.0188,
+    "longitude": 76.3491,
+    "riskLevel": "MEDIUM",
+    "accidentCount": 5,
+    "junctionType": "Sharp turn",
+    "visibilityCondition": "Blocked view",
+    "roadType": "Urban arterial",
+    "recommendedSpeed": 25,
+    "description": "Crowded turn with parked vehicles blocking rider visibility.",
+    "updatedAt": "2026-09-13T00:00:00.000Z"
+  }
+]

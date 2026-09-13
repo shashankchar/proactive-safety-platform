@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/manual-build/
+
+*.class
+*.apk.idsig
+
+.DS_Store
+Thumbs.db

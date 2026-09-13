@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Proactive Safety icon">
+  <rect width="128" height="128" rx="26" fill="#0f5f56"/>
+  <path d="M64 16l42 17v29c0 27-17 42-42 50-25-8-42-23-42-50V33l42-17z" fill="#e8fff8"/>
+  <path d="M64 30l28 11v20c0 18-11 29-28 35-17-6-28-17-28-35V41l28-11z" fill="#ffcc4d"/>
+  <path d="M59 43h10v29H59V43zm0 38h10v10H59V81z" fill="#0f241f"/>
+</svg>

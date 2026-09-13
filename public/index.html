@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f5f56">
+    <title>Proactive Safety</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="control-rail" aria-label="Application controls">
+        <div class="brand">
+          <img src="/assets/icon.svg" alt="" width="44" height="44">
+          <div>
+            <strong>PROACTIVE SAFETY</strong>
+            <span>Detect danger. Warn early.</span>
+          </div>
+        </div>
+
+        <nav class="tabs" aria-label="Views">
+          <button class="tab-button active" data-view="journey" type="button">Journey</button>
+          <button class="tab-button" data-view="emergency" type="button">SOS</button>
+          <button class="tab-button" data-view="admin" type="button">Admin</button>
+        </nav>
+
+        <section class="status-panel">
+          <span class="eyebrow">Current Risk</span>
+          <strong id="railRiskLevel">LOW</strong>
+          <meter id="railRiskMeter" min="0" max="100" value="0"></meter>
+          <small id="railRiskReason">Journey not started</small>
+        </section>
+
+        <section class="settings-panel" aria-label="Live scenario settings">
+          <div class="field-row">
+            <label for="userSpeed">Your speed</label>
+            <output id="userSpeedOutput">35 km/h</output>
+          </div>
+          <input id="userSpeed" type="range" min="0" max="90" value="35">
+
+          <div class="field-row">
+            <label for="rightSpeed">Right vehicle</label>
+            <output id="rightSpeedOutput">80 km/h</output>
+          </div>
+          <input id="rightSpeed" type="range" min="0" max="130" value="80">
+
+          <div class="field-row">
+            <label for="leftSpeed">Left vehicle</label>
+            <output id="leftSpeedOutput">45 km/h</output>
+          </div>
+          <input id="leftSpeed" type="range" min="0" max="120" value="45">
+
+          <div class="toggle-row">
+            <label for="nightMode">Night</label>
+            <input id="nightMode" type="checkbox" checked>
+          </div>
+          <div class="toggle-row">
+            <label for="poorVisibility">Poor visibility</label>
+            <input id="poorVisibility" type="checkbox" checked>
+          </div>
+        </section>
+      </aside>
+
+      <main>
+        <section class="view active" id="journeyView" aria-label="Active journey">
+          <div class="topbar">
+            <div>
+              <span class="eyebrow">Active Journey</span>
+              <h1>4-road junction safety monitor</h1>
+            </div>
+            <button id="journeyToggle" class="primary-button" type="button">Start Journey</button>
+          </div>
+
+          <div class="journey-grid">
+            <section class="map-panel" aria-label="Live road simulation">
+              <canvas id="junctionCanvas" width="900" height="620"></canvas>
+              <div id="warningOverlay" class="warning-overlay hidden" role="alert">
+                <span id="warningLevel">HIGH RISK</span>
+                <strong id="warningTitle">Cross-junction danger</strong>
+                <p id="warningText">Reduce speed and prepare to stop.</p>
+              </div>
+            </section>
+
+            <section class="live-panel">
+              <div class="metric-grid">
+                <div>
+                  <span>Risk Score</span>
+                  <strong id="riskScore">0</strong>
+                </div>
+                <div>
+                  <span>Closing Speed</span>
+                  <strong id="closingSpeed">0 km/h</strong>
+                </div>
+                <div>
+                  <span>Time to Conflict</span>
+                  <strong id="timeToConflict">--</strong>
+                </div>
+                <div>
+                  <span>Next Zone</span>
+                  <strong id="nextZone">--</strong>
+                </div>
+              </div>
+
+              <div class="action-box" id="actionBox">
+                <span>Recommended Action</span>
+                <strong id="recommendedAction">Start journey to monitor risk.</strong>
+              </div>
+
+              <div class="factor-list" id="factorList" aria-label="Risk explanation"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="emergencyView" aria-label="Emergency controls">
+          <div class="topbar">
+            <div>
+              <span class="eyebrow">Emergency</span>
+              <h1>SOS and location sharing</h1>
+            </div>
+          </div>
+
+          <div class="sos-layout">
+            <section class="sos-panel">
+              <button id="sosButton" class="sos-button" type="button">SOS</button>
+              <p id="sosStatus">Emergency mode is ready.</p>
+            </section>
+            <section class="emergency-actions">
+              <button type="button" data-sos-action="call">Call Emergency Services</button>
+              <button type="button" data-sos-action="location">Send Current Location</button>
+              <button type="button" data-sos-action="contact">Alert Emergency Contact</button>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="adminView" aria-label="Risk-zone administration">
+          <div class="topbar">
+            <div>
+              <span class="eyebrow">Admin</span>
+              <h1>Risk-zone management</h1>
+            </div>
+          </div>
+
+          <div class="admin-layout">
+            <form id="zoneForm" class="zone-form">
+              <label>
+                Location name
+                <input name="name" required placeholder="Highway Cross Junction B">
+              </label>
+              <label>
+                Latitude
+                <input name="latitude" required type="number" step="0.000001" value="10.0154">
+              </label>
+              <label>
+                Longitude
+                <input name="longitude" required type="number" step="0.000001" value="76.3419">
+              </label>
+              <label>
+                Risk level
+                <select name="riskLevel">
+                  <option>HIGH</option>
+                  <option>CRITICAL</option>
+                  <option>MEDIUM</option>
+                  <option>LOW</option>
+                </select>
+              </label>
+              <label>
+                Road type
+                <input name="roadType" required value="Highway crossing">
+              </label>
+              <label>
+                Recommended speed
+                <input name="recommendedSpeed" type="number" value="30">
+              </label>
+              <label class="wide">
+                Description
+                <textarea name="description" rows="3">Poorly illuminated 4-road junction with fast side traffic.</textarea>
+              </label>
+              <button class="primary-button wide" type="submit">Add Risk Zone</button>
+            </form>
+
+            <section>
+              <div class="zone-list" id="zoneList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/risk-engine.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
