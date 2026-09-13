@@ -110,7 +110,19 @@ function directionLabel(origin, target) {
   return "left";
 }
 
+function headingDifferenceDegrees(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+function isSameDirection(self, other) {
+  const difference = headingDifferenceDegrees(self.headingDeg, other.headingDeg);
+  return difference !== null && difference < 45;
+}
+
 function closestApproachAlert(self, other) {
+  if (isSameDirection(self, other)) return null;
+
   const relativePosition = projectRelativeMeters(self, other);
   const selfVelocity = velocityMetersPerSecond(self);
   const otherVelocity = velocityMetersPerSecond(other);

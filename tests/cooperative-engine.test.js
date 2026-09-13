@@ -30,6 +30,33 @@ assert.strictEqual(pathAlert.level, "CRITICAL");
 assert.strictEqual(pathAlert.closingSpeedKmh, 170);
 assert(pathAlert.secondsToConflict > 2 && pathAlert.secondsToConflict < 3);
 
+const sameDirectionFrontVehicle = normalizeVehicle({
+  vehicleId: "same-front",
+  latitude: 10.000500,
+  longitude: 76.000000,
+  speedKmh: 40,
+  headingDeg: 0
+}, now);
+
+const sameDirectionBehindVehicle = normalizeVehicle({
+  vehicleId: "same-behind",
+  latitude: 9.999500,
+  longitude: 76.000000,
+  speedKmh: 100,
+  headingDeg: 0
+}, now);
+
+assert.strictEqual(
+  closestApproachAlert(bike, sameDirectionFrontVehicle),
+  null,
+  "Expected same-direction vehicle ahead to avoid cooperative alert"
+);
+assert.strictEqual(
+  closestApproachAlert(bike, sameDirectionBehindVehicle),
+  null,
+  "Expected faster same-direction vehicle behind to avoid cooperative alert"
+);
+
 const zone = {
   id: "RZ001",
   name: "Highway Cross Junction A",
@@ -56,6 +83,20 @@ const southVehicle = normalizeVehicle({
 const junctionAlert = junctionConflictAlert(eastVehicle, southVehicle, [zone]);
 assert(junctionAlert, "Expected two app users approaching same junction to trigger alert");
 assert(["HIGH", "CRITICAL"].includes(junctionAlert.level));
+
+const sameRoadJunctionVehicle = normalizeVehicle({
+  vehicleId: "same-road-junction",
+  latitude: 10.0000,
+  longitude: 76.0005,
+  speedKmh: 60,
+  headingDeg: 0
+}, now);
+
+assert.strictEqual(
+  junctionConflictAlert(southVehicle, sameRoadJunctionVehicle, [zone]),
+  null,
+  "Expected same-direction vehicles near one junction to avoid junction alert"
+);
 
 const alerts = findAlertsForVehicle(eastVehicle, [eastVehicle, southVehicle], [zone], now);
 assert(alerts.length >= 1, "Expected at least one cooperative alert");
