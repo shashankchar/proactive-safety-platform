@@ -19,7 +19,7 @@ import java.util.Locale;
 final class CooperativeSafetyClient {
     static final String PREFS = "proactive_safety";
     static final String KEY_SERVER_URL = "server_url";
-    static final String DEFAULT_SERVER_URL = "http://10.199.230.148:3000";
+    static final String DEFAULT_SERVER_URL = "https://proactive-safety-backend.shashankcharyaswork.chatgpt.site";
 
     private CooperativeSafetyClient() {
     }
