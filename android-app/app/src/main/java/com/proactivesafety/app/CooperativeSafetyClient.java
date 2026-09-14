@@ -14,6 +14,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 final class CooperativeSafetyClient {
@@ -173,70 +175,29 @@ final class CooperativeSafetyClient {
             throw new IllegalStateException("Cooperative backend error: " + status);
         }
 
-        JSONObject json = new JSONObject(response.toString());
-        int activeVehicles = json.optInt("activeVehicles", 1);
-        JSONArray alerts = json.optJSONArray("alerts");
-        if (alerts == null || alerts.length() == 0) {
-            return CooperativeAlert.none(activeVehicles);
-        }
-
-        JSONObject alert = alerts.getJSONObject(0);
-        JSONArray nearbyVehicles = json.optJSONArray("nearbyVehicles");
-        double otherLatitude = 0;
-        double otherLongitude = 0;
-        boolean hasOtherLocation = false;
-        String otherVehicleId = alert.optString("otherVehicleId", "");
-        if (nearbyVehicles != null) {
-            for (int i = 0; i < nearbyVehicles.length(); i++) {
-                JSONObject vehicle = nearbyVehicles.getJSONObject(i);
-                if (otherVehicleId.equals(vehicle.optString("vehicleId", ""))) {
-                    otherLatitude = vehicle.optDouble("latitude", 0);
-                    otherLongitude = vehicle.optDouble("longitude", 0);
-                    hasOtherLocation = true;
-                    break;
-                }
-            }
-        }
-
-        return new CooperativeAlert(
-                true,
-                alert.optString("level", "HIGH"),
-                alert.optInt("score", 70),
-                alert.optString("message", "Nearby app-user vehicle conflict detected."),
-                otherVehicleId,
-                alert.optString("direction", ""),
-                alert.optInt("closingSpeedKmh", 0),
-                alert.optDouble("secondsToConflict", 0),
-                activeVehicles,
-                otherLatitude,
-                otherLongitude,
-                hasOtherLocation
-        );
+        return parseAlertResponse(response.toString());
     }
 
     static CooperativeAlert parseAlertResponse(String response) throws Exception {
         JSONObject json = new JSONObject(response);
         int activeVehicles = json.optInt("activeVehicles", 1);
+        List<NearbyVehicle> nearby = parseNearbyVehicles(json.optJSONArray("nearbyVehicles"));
         JSONArray alerts = json.optJSONArray("alerts");
         if (alerts == null || alerts.length() == 0) {
-            return CooperativeAlert.none(activeVehicles);
+            return CooperativeAlert.none(activeVehicles, nearby);
         }
 
         JSONObject alert = alerts.getJSONObject(0);
-        JSONArray nearbyVehicles = json.optJSONArray("nearbyVehicles");
         double otherLatitude = 0;
         double otherLongitude = 0;
         boolean hasOtherLocation = false;
         String otherVehicleId = alert.optString("otherVehicleId", "");
-        if (nearbyVehicles != null) {
-            for (int i = 0; i < nearbyVehicles.length(); i++) {
-                JSONObject vehicle = nearbyVehicles.getJSONObject(i);
-                if (otherVehicleId.equals(vehicle.optString("vehicleId", ""))) {
-                    otherLatitude = vehicle.optDouble("latitude", 0);
-                    otherLongitude = vehicle.optDouble("longitude", 0);
+        for (NearbyVehicle vehicle : nearby) {
+            if (otherVehicleId.equals(vehicle.vehicleId)) {
+                    otherLatitude = vehicle.latitude;
+                    otherLongitude = vehicle.longitude;
                     hasOtherLocation = true;
                     break;
-                }
             }
         }
 
@@ -252,8 +213,29 @@ final class CooperativeSafetyClient {
                 activeVehicles,
                 otherLatitude,
                 otherLongitude,
-                hasOtherLocation
+                hasOtherLocation,
+                nearby
         );
+    }
+
+    private static List<NearbyVehicle> parseNearbyVehicles(JSONArray nearbyVehicles) throws Exception {
+        List<NearbyVehicle> nearby = new ArrayList<>();
+        if (nearbyVehicles == null) return nearby;
+
+        for (int i = 0; i < nearbyVehicles.length(); i++) {
+            JSONObject vehicle = nearbyVehicles.getJSONObject(i);
+            boolean hasHeading = !vehicle.isNull("headingDeg");
+            nearby.add(new NearbyVehicle(
+                    vehicle.optString("vehicleId", ""),
+                    vehicle.optDouble("latitude", 0),
+                    vehicle.optDouble("longitude", 0),
+                    vehicle.optInt("speedKmh", 0),
+                    hasHeading ? vehicle.optDouble("headingDeg", 0) : 0,
+                    vehicle.optLong("ageMs", 0),
+                    hasHeading
+            ));
+        }
+        return nearby;
     }
 
     static String describe(CooperativeAlert alert) {

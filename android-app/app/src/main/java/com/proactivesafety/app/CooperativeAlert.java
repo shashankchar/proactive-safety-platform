@@ -1,5 +1,8 @@
 package com.proactivesafety.app;
 
+import java.util.Collections;
+import java.util.List;
+
 final class CooperativeAlert {
     final boolean present;
     final String level;
@@ -13,6 +16,7 @@ final class CooperativeAlert {
     final double otherLatitude;
     final double otherLongitude;
     final boolean hasOtherLocation;
+    final List<NearbyVehicle> nearbyVehicles;
 
     CooperativeAlert(
             boolean present,
@@ -26,7 +30,8 @@ final class CooperativeAlert {
             int activeVehicles,
             double otherLatitude,
             double otherLongitude,
-            boolean hasOtherLocation
+            boolean hasOtherLocation,
+            List<NearbyVehicle> nearbyVehicles
     ) {
         this.present = present;
         this.level = level;
@@ -40,9 +45,14 @@ final class CooperativeAlert {
         this.otherLatitude = otherLatitude;
         this.otherLongitude = otherLongitude;
         this.hasOtherLocation = hasOtherLocation;
+        this.nearbyVehicles = nearbyVehicles == null ? Collections.emptyList() : nearbyVehicles;
     }
 
     static CooperativeAlert none(int activeVehicles) {
-        return new CooperativeAlert(false, "LOW", 0, "No app-user conflict detected.", "", "", 0, 0, activeVehicles, 0, 0, false);
+        return none(activeVehicles, Collections.emptyList());
+    }
+
+    static CooperativeAlert none(int activeVehicles, List<NearbyVehicle> nearbyVehicles) {
+        return new CooperativeAlert(false, "LOW", 0, "No app-user conflict detected.", "", "", 0, 0, activeVehicles, 0, 0, false, nearbyVehicles);
     }
 }

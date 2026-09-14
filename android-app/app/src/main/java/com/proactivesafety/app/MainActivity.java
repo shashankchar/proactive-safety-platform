@@ -42,13 +42,19 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private TextView statusView;
     private Button monitorButton;
     private boolean monitoring = false;
+    private long lastCooperativePublishAt = 0L;
+    private long lastMapRenderAt = 0L;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Location lastLocation;
     private final Runnable heartbeat = new Runnable() {
         @Override
         public void run() {
             if (monitoring && lastLocation != null) {
-                publishCooperativeLocation(lastLocation);
+                long now = System.currentTimeMillis();
+                if (now - lastCooperativePublishAt >= cooperativeIntervalMs(lastLocation)) {
+                    lastCooperativePublishAt = now;
+                    publishCooperativeLocation(lastLocation);
+                }
             }
             handler.postDelayed(this, 1000L);
         }
@@ -75,7 +81,11 @@ public class MainActivity extends android.app.Activity implements LocationListen
         lastLocation = location;
         SafetyAssessment assessment = RiskEngine.assess(location);
         renderAssessment(location, assessment);
-        publishCooperativeLocation(location);
+        long now = System.currentTimeMillis();
+        if (now - lastCooperativePublishAt >= cooperativeIntervalMs(location)) {
+            lastCooperativePublishAt = now;
+            publishCooperativeLocation(location);
+        }
     }
 
     @Override
@@ -386,6 +396,12 @@ public class MainActivity extends android.app.Activity implements LocationListen
         if (lastKnown != null) onLocationChanged(lastKnown);
     }
 
+    private long cooperativeIntervalMs(Location location) {
+        int speedKmh = RiskEngine.speedKmh(location);
+        if (speedKmh < 5) return 5000L;
+        return 1000L;
+    }
+
     private boolean isAnyLocationProviderEnabled() {
         return locationManager != null &&
                 (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
@@ -431,7 +447,9 @@ public class MainActivity extends android.app.Activity implements LocationListen
                 location.getLongitude()
         ));
 
-        if (realMapView != null) {
+        long now = System.currentTimeMillis();
+        if (realMapView != null && now - lastMapRenderAt >= 500L) {
+            lastMapRenderAt = now;
             realMapView.update(location, assessment, assessment.cooperativeAlert, monitoring);
         }
     }
