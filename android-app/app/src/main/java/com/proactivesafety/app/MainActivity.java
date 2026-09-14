@@ -50,7 +50,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
             if (monitoring && lastLocation != null) {
                 publishCooperativeLocation(lastLocation);
             }
-            handler.postDelayed(this, 5000L);
+            handler.postDelayed(this, 1000L);
         }
     };
 
@@ -349,7 +349,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
 
         requestLocalUpdates();
         handler.removeCallbacks(heartbeat);
-        handler.postDelayed(heartbeat, 5000L);
+        handler.postDelayed(heartbeat, 1000L);
     }
 
     private void stopMonitoring() {
@@ -366,11 +366,11 @@ public class MainActivity extends android.app.Activity implements LocationListen
 
         boolean requested = false;
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1200L, 2f, this);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 300L, 0f, this);
             requested = true;
         }
         if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2500L, 8f, this);
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 3f, this);
             requested = true;
         }
 

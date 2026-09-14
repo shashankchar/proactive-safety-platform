@@ -1,5 +1,9 @@
-const STALE_AFTER_MS = 60_000;
+const STALE_AFTER_MS = 20_000;
+const MAX_CONFLICT_SECONDS = 30;
+const CRITICAL_CONFLICT_SECONDS = 8;
+const MAX_MISS_DISTANCE_METERS = 60;
 const liveVehicles = new Map();
+const liveSockets = new Map();
 
 const riskZones = [
   {
@@ -139,7 +143,7 @@ function closestApproachAlert(self, other) {
       relativePosition.x * relativeVelocity.x +
       relativePosition.y * relativeVelocity.y
     ) / relativeSpeedSq;
-  if (tClosest < 0 || tClosest > 20) return null;
+  if (tClosest < 0 || tClosest > MAX_CONFLICT_SECONDS) return null;
 
   const closest = {
     x: relativePosition.x + relativeVelocity.x * tClosest,
@@ -147,11 +151,11 @@ function closestApproachAlert(self, other) {
   };
   const missDistanceMeters = Math.hypot(closest.x, closest.y);
   const currentDistanceMeters = Math.hypot(relativePosition.x, relativePosition.y);
-  if (currentDistanceMeters > 900 || missDistanceMeters > 45) return null;
+  if (currentDistanceMeters > 900 || missDistanceMeters > MAX_MISS_DISTANCE_METERS) return null;
 
   const closingSpeedKmh = self.speedKmh + other.speedKmh;
-  const score = Math.min(100, Math.round(100 - missDistanceMeters + Math.max(0, 20 - tClosest) * 2));
-  const level = tClosest <= 6 || missDistanceMeters <= 22 ? "CRITICAL" : "HIGH";
+  const score = Math.min(100, Math.round(100 - missDistanceMeters + Math.max(0, MAX_CONFLICT_SECONDS - tClosest) * 2));
+  const level = tClosest <= CRITICAL_CONFLICT_SECONDS || missDistanceMeters <= 22 ? "CRITICAL" : "HIGH";
   const direction = directionLabel(self, other);
 
   return {
@@ -182,15 +186,92 @@ function findAlertsForVehicle(self, vehicles, now = Date.now()) {
   return alerts.sort((a, b) => b.score - a.score);
 }
 
+function nearbyVehiclesFor(vehicle, vehicles, now) {
+  return vehicles
+    .filter((item) => item.vehicleId !== vehicle.vehicleId)
+    .map((item) => ({
+      vehicleId: item.vehicleId,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      speedKmh: item.speedKmh,
+      headingDeg: item.headingDeg,
+      ageMs: now - item.updatedAt
+    }));
+}
+
+function cooperativeResponse(vehicle, now = Date.now()) {
+  removeStaleVehicles(now);
+  const vehicles = Array.from(liveVehicles.values());
+  return {
+    ok: true,
+    transport: "websocket",
+    vehicleId: vehicle.vehicleId,
+    activeVehicles: vehicles.length,
+    nearbyVehicles: nearbyVehiclesFor(vehicle, vehicles, now),
+    alerts: findAlertsForVehicle(vehicle, vehicles, now),
+    serverTime: now
+  };
+}
+
+function sendSocket(socket, payload) {
+  try {
+    socket.send(JSON.stringify(payload));
+  } catch (error) {
+  }
+}
+
+function broadcastSocketAlerts(now = Date.now()) {
+  removeStaleVehicles(now);
+  for (const [vehicleId, socket] of liveSockets.entries()) {
+    const vehicle = liveVehicles.get(vehicleId);
+    if (!vehicle) {
+      liveSockets.delete(vehicleId);
+      continue;
+    }
+    sendSocket(socket, cooperativeResponse(vehicle, now));
+  }
+}
+
 function removeStaleVehicles(now = Date.now()) {
   for (const [id, vehicle] of liveVehicles.entries()) {
-    if (now - vehicle.updatedAt > STALE_AFTER_MS) liveVehicles.delete(id);
+    if (now - vehicle.updatedAt > STALE_AFTER_MS) {
+      liveVehicles.delete(id);
+      liveSockets.delete(id);
+    }
   }
 }
 
 async function handleRequest(request) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return json({ ok: true });
+
+  if (url.pathname === "/api/cooperative/ws" && request.headers.get("upgrade") === "websocket") {
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    let socketVehicleId = null;
+
+    server.accept();
+    server.addEventListener("message", (event) => {
+      try {
+        const now = Date.now();
+        const vehicle = normalizeVehicle(JSON.parse(event.data), now);
+        socketVehicleId = vehicle.vehicleId;
+        liveVehicles.set(vehicle.vehicleId, vehicle);
+        liveSockets.set(vehicle.vehicleId, server);
+        broadcastSocketAlerts(now);
+      } catch (error) {
+        sendSocket(server, { ok: false, error: error.message || "Invalid cooperative websocket payload" });
+      }
+    });
+    server.addEventListener("close", () => {
+      if (socketVehicleId) liveSockets.delete(socketVehicleId);
+    });
+    server.addEventListener("error", () => {
+      if (socketVehicleId) liveSockets.delete(socketVehicleId);
+    });
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
 
   if (url.pathname === "/" || url.pathname === "/api/health") {
     return json({ ok: true, service: "proactive-safety-platform" });
@@ -208,23 +289,17 @@ async function handleRequest(request) {
       removeStaleVehicles(now);
 
       const vehicles = Array.from(liveVehicles.values());
-      const nearbyVehicles = vehicles
-        .filter((item) => item.vehicleId !== vehicle.vehicleId)
-        .map((item) => ({
-          vehicleId: item.vehicleId,
-          latitude: item.latitude,
-          longitude: item.longitude,
-          speedKmh: item.speedKmh,
-          headingDeg: item.headingDeg,
-          ageMs: now - item.updatedAt
-        }));
+      const nearbyVehicles = nearbyVehiclesFor(vehicle, vehicles, now);
+      broadcastSocketAlerts(now);
 
       return json({
         ok: true,
+        transport: "http",
         vehicleId: vehicle.vehicleId,
         activeVehicles: vehicles.length,
         nearbyVehicles,
-        alerts: findAlertsForVehicle(vehicle, vehicles, now)
+        alerts: findAlertsForVehicle(vehicle, vehicles, now),
+        serverTime: now
       });
     } catch (error) {
       return json({ error: error.message || "Invalid cooperative safety payload" }, 400);

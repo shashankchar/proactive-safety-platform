@@ -32,14 +32,17 @@ public class SafetyLocationService extends Service implements LocationListener {
     private TextToSpeech textToSpeech;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Location lastLocation;
+    private SafetyAssessment lastAssessment;
     private long lastWarningAt = 0L;
+    private long lastPublishedAt = 0L;
+    private long lastHttpFallbackAt = 0L;
     private final Runnable heartbeat = new Runnable() {
         @Override
         public void run() {
             if (lastLocation != null) {
                 onLocationChanged(lastLocation);
             }
-            handler.postDelayed(this, 5000L);
+            handler.postDelayed(this, 1000L);
         }
     };
 
@@ -59,15 +62,17 @@ public class SafetyLocationService extends Service implements LocationListener {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, buildNotification("Monitoring road risk", "GPS safety monitoring is active."));
+        CooperativeSafetyClient.startLiveSession(this, this::handleCooperativeAlert);
         requestLocationUpdates();
         handler.removeCallbacks(heartbeat);
-        handler.postDelayed(heartbeat, 5000L);
+        handler.postDelayed(heartbeat, 1000L);
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
         if (locationManager != null) locationManager.removeUpdates(this);
+        CooperativeSafetyClient.stopLiveSession();
         handler.removeCallbacks(heartbeat);
         if (textToSpeech != null) {
             textToSpeech.stop();
@@ -85,10 +90,29 @@ public class SafetyLocationService extends Service implements LocationListener {
     public void onLocationChanged(Location location) {
         lastLocation = location;
         SafetyAssessment assessment = RiskEngine.assess(location);
-        publishCooperativeLocation(location, assessment);
+        lastAssessment = assessment;
+        long now = System.currentTimeMillis();
+        if (now - lastPublishedAt >= cooperativeIntervalMs(location)) {
+            lastPublishedAt = now;
+            publishCooperativeLocation(location, assessment);
+        }
+    }
+
+    private long cooperativeIntervalMs(Location location) {
+        int speedKmh = RiskEngine.speedKmh(location);
+        if (speedKmh < 5) return 5000L;
+        return 1000L;
     }
 
     private void publishCooperativeLocation(Location location, SafetyAssessment assessment) {
+        boolean socketSent = CooperativeSafetyClient.sendLiveLocation(this, location);
+        long now = System.currentTimeMillis();
+        if (socketSent && now - lastHttpFallbackAt < 5000L) {
+            notificationManager.notify(NOTIFICATION_ID, buildNotification(assessment.level + " road risk", assessment.action));
+            return;
+        }
+        lastHttpFallbackAt = now;
+
         new Thread(() -> {
             CooperativeAlert cooperativeAlert = null;
             try {
@@ -96,17 +120,24 @@ public class SafetyLocationService extends Service implements LocationListener {
             } catch (Exception ignored) {
             }
 
-            CooperativeAlert finalAlert = cooperativeAlert;
-            String level = finalAlert != null && finalAlert.present ? finalAlert.level : assessment.level;
-            String body = finalAlert != null && finalAlert.present ? finalAlert.message : assessment.action;
-            String title = level + " road risk";
-
-            notificationManager.notify(NOTIFICATION_ID, buildNotification(title, body));
-
-            if ((finalAlert != null && finalAlert.present) || assessment.shouldWarn()) {
-                warnUser(body);
-            }
+            handleCooperativeAlert(cooperativeAlert);
         }).start();
+    }
+
+    private void handleCooperativeAlert(CooperativeAlert cooperativeAlert) {
+        SafetyAssessment assessment = lastAssessment;
+        if (assessment == null && lastLocation != null) assessment = RiskEngine.assess(lastLocation);
+        if (assessment == null) return;
+
+        String level = cooperativeAlert != null && cooperativeAlert.present ? cooperativeAlert.level : assessment.level;
+        String body = cooperativeAlert != null && cooperativeAlert.present ? cooperativeAlert.message : assessment.action;
+        String title = level + " road risk";
+
+        notificationManager.notify(NOTIFICATION_ID, buildNotification(title, body));
+
+        if ((cooperativeAlert != null && cooperativeAlert.present) || assessment.shouldWarn()) {
+            warnUser(body);
+        }
     }
 
 
@@ -130,11 +161,11 @@ public class SafetyLocationService extends Service implements LocationListener {
 
         boolean requested = false;
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1500L, 3f, this);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 300L, 0f, this);
             requested = true;
         }
         if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2500L, 10f, this);
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 3f, this);
             requested = true;
         }
         if (!requested) {
@@ -147,7 +178,7 @@ public class SafetyLocationService extends Service implements LocationListener {
 
     private void warnUser(String warningText) {
         long now = System.currentTimeMillis();
-        if (now - lastWarningAt < 12000L) return;
+        if (now - lastWarningAt < 6000L) return;
         lastWarningAt = now;
 
         Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
@@ -180,6 +211,8 @@ public class SafetyLocationService extends Service implements LocationListener {
                 .setContentText(body)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setCategory(Notification.CATEGORY_STATUS)
                 .build();
     }
 

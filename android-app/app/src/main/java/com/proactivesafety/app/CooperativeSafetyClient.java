@@ -21,8 +21,13 @@ final class CooperativeSafetyClient {
     static final String KEY_SERVER_URL = "server_url";
     static final String KEY_OLA_API_KEY = "ola_maps_api_key";
     static final String DEFAULT_SERVER_URL = "https://proactive-safety-backend.shashankcharyaswork.chatgpt.site";
+    private static CooperativeWebSocketClient webSocketClient;
 
     private CooperativeSafetyClient() {
+    }
+
+    interface AlertListener {
+        void onAlert(CooperativeAlert alert);
     }
 
     static String serverUrl(Context context) {
@@ -40,6 +45,7 @@ final class CooperativeSafetyClient {
                 .edit()
                 .putString(KEY_SERVER_URL, url)
                 .apply();
+        stopLiveSession();
     }
 
     static String olaApiKey(Context context) {
@@ -61,15 +67,49 @@ final class CooperativeSafetyClient {
         return "android-" + androidId;
     }
 
-    static CooperativeAlert publishLocation(Context context, Location location) throws Exception {
-        String endpoint = serverUrl(context) + "/api/cooperative/location";
-        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(6000);
-        connection.setReadTimeout(6000);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+    static synchronized void startLiveSession(Context context, AlertListener listener) {
+        if (webSocketClient != null && webSocketClient.isConnected()) return;
 
+        try {
+            String wsUrl = serverUrl(context)
+                    .replaceFirst("^https://", "wss://")
+                    .replaceFirst("^http://", "ws://") + "/api/cooperative/ws";
+            webSocketClient = new CooperativeWebSocketClient(wsUrl, new CooperativeWebSocketClient.Listener() {
+                @Override
+                public void onMessage(String message) {
+                    try {
+                        if (listener != null) listener.onAlert(parseAlertResponse(message));
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                @Override
+                public void onClosed() {
+                }
+            });
+            webSocketClient.connect();
+        } catch (Exception ignored) {
+            webSocketClient = null;
+        }
+    }
+
+    static synchronized void stopLiveSession() {
+        if (webSocketClient != null) {
+            webSocketClient.close();
+            webSocketClient = null;
+        }
+    }
+
+    static boolean sendLiveLocation(Context context, Location location) {
+        try {
+            if (webSocketClient == null || !webSocketClient.isConnected()) return false;
+            return webSocketClient.send(locationPayload(context, location).toString());
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
+    static JSONObject locationPayload(Context context, Location location) throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("vehicleId", vehicleId(context));
         payload.put("latitude", location.getLatitude());
@@ -77,8 +117,41 @@ final class CooperativeSafetyClient {
         payload.put("speedKmh", RiskEngine.speedKmh(location));
         payload.put("headingDeg", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
         payload.put("accuracyMeters", location.hasAccuracy() ? location.getAccuracy() : 0);
+        payload.put("clientTime", System.currentTimeMillis());
 
-        byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+        if (location.hasBearing() && location.hasSpeed()) {
+            payload.put("predicted2s", predictedPoint(location, 2));
+            payload.put("predicted5s", predictedPoint(location, 5));
+        }
+
+        return payload;
+    }
+
+    private static JSONObject predictedPoint(Location location, int seconds) throws Exception {
+        double speedMetersPerSecond = Math.max(0, location.getSpeed());
+        double distanceMeters = speedMetersPerSecond * seconds;
+        double headingRadians = Math.toRadians(location.getBearing());
+        double latOffset = Math.cos(headingRadians) * distanceMeters / 111_320d;
+        double lngOffset = Math.sin(headingRadians) * distanceMeters /
+                (111_320d * Math.cos(Math.toRadians(location.getLatitude())));
+
+        JSONObject point = new JSONObject();
+        point.put("seconds", seconds);
+        point.put("latitude", location.getLatitude() + latOffset);
+        point.put("longitude", location.getLongitude() + lngOffset);
+        return point;
+    }
+
+    static CooperativeAlert publishLocation(Context context, Location location) throws Exception {
+        String endpoint = serverUrl(context) + "/api/cooperative/location";
+        HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
+        connection.setRequestMethod("POST");
+        connection.setConnectTimeout(2500);
+        connection.setReadTimeout(2500);
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+
+        byte[] body = locationPayload(context, location).toString().getBytes(StandardCharsets.UTF_8);
         try (OutputStream output = connection.getOutputStream()) {
             output.write(body);
         }
@@ -101,6 +174,48 @@ final class CooperativeSafetyClient {
         }
 
         JSONObject json = new JSONObject(response.toString());
+        int activeVehicles = json.optInt("activeVehicles", 1);
+        JSONArray alerts = json.optJSONArray("alerts");
+        if (alerts == null || alerts.length() == 0) {
+            return CooperativeAlert.none(activeVehicles);
+        }
+
+        JSONObject alert = alerts.getJSONObject(0);
+        JSONArray nearbyVehicles = json.optJSONArray("nearbyVehicles");
+        double otherLatitude = 0;
+        double otherLongitude = 0;
+        boolean hasOtherLocation = false;
+        String otherVehicleId = alert.optString("otherVehicleId", "");
+        if (nearbyVehicles != null) {
+            for (int i = 0; i < nearbyVehicles.length(); i++) {
+                JSONObject vehicle = nearbyVehicles.getJSONObject(i);
+                if (otherVehicleId.equals(vehicle.optString("vehicleId", ""))) {
+                    otherLatitude = vehicle.optDouble("latitude", 0);
+                    otherLongitude = vehicle.optDouble("longitude", 0);
+                    hasOtherLocation = true;
+                    break;
+                }
+            }
+        }
+
+        return new CooperativeAlert(
+                true,
+                alert.optString("level", "HIGH"),
+                alert.optInt("score", 70),
+                alert.optString("message", "Nearby app-user vehicle conflict detected."),
+                otherVehicleId,
+                alert.optString("direction", ""),
+                alert.optInt("closingSpeedKmh", 0),
+                alert.optDouble("secondsToConflict", 0),
+                activeVehicles,
+                otherLatitude,
+                otherLongitude,
+                hasOtherLocation
+        );
+    }
+
+    static CooperativeAlert parseAlertResponse(String response) throws Exception {
+        JSONObject json = new JSONObject(response);
         int activeVehicles = json.optInt("activeVehicles", 1);
         JSONArray alerts = json.optJSONArray("alerts");
         if (alerts == null || alerts.length() == 0) {
