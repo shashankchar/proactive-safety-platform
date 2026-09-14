@@ -25,6 +25,7 @@ import java.util.Locale;
 
 public class SafetyLocationService extends Service implements LocationListener {
     static final String CHANNEL_ID = "safety_monitoring";
+    static final String ALERT_CHANNEL_ID = "safety_alerts";
     private static final int NOTIFICATION_ID = 1001;
 
     private LocationManager locationManager;
@@ -110,7 +111,7 @@ public class SafetyLocationService extends Service implements LocationListener {
         boolean socketSent = CooperativeSafetyClient.sendLiveLocation(this, location);
         long now = System.currentTimeMillis();
         if (socketSent && now - lastHttpFallbackAt < 5000L) {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification(assessment.level + " road risk", assessment.action));
+            updateNotification(null, assessment);
             return;
         }
         lastHttpFallbackAt = now;
@@ -131,15 +132,34 @@ public class SafetyLocationService extends Service implements LocationListener {
         if (assessment == null && lastLocation != null) assessment = RiskEngine.assess(lastLocation);
         if (assessment == null) return;
 
-        String level = cooperativeAlert != null && cooperativeAlert.present ? cooperativeAlert.level : assessment.level;
-        String body = cooperativeAlert != null && cooperativeAlert.present ? cooperativeAlert.message : assessment.action;
-        String title = level + " road risk";
-
-        notificationManager.notify(NOTIFICATION_ID, buildNotification(title, body));
+        updateNotification(cooperativeAlert, assessment);
 
         if ((cooperativeAlert != null && cooperativeAlert.present) || assessment.shouldWarn()) {
-            warnUser(body);
+            warnUser(cooperativeAlert != null && cooperativeAlert.present ? cooperativeAlert.message : assessment.action);
         }
+    }
+
+    private void updateNotification(CooperativeAlert cooperativeAlert, SafetyAssessment assessment) {
+        if (cooperativeAlert != null && cooperativeAlert.present) {
+            notificationManager.notify(
+                    NOTIFICATION_ID,
+                    buildNotification(cooperativeAlert.level + " app-user risk", cooperativeAlert.message, true)
+            );
+            return;
+        }
+
+        if (assessment.shouldWarn()) {
+            notificationManager.notify(
+                    NOTIFICATION_ID,
+                    buildNotification(assessment.level + " road risk", assessment.action, true)
+            );
+            return;
+        }
+
+        notificationManager.notify(
+                NOTIFICATION_ID,
+                buildNotification("Safety monitoring active", "No current road risk.", false)
+        );
     }
 
 
@@ -173,7 +193,7 @@ public class SafetyLocationService extends Service implements LocationListener {
         if (!requested) {
             notificationManager.notify(
                     NOTIFICATION_ID,
-                    buildNotification("Location is off", "Enable phone location/GPS for safety monitoring.")
+                    buildNotification("Location is off", "Enable phone location/GPS for safety monitoring.", true)
             );
         }
     }
@@ -199,6 +219,10 @@ public class SafetyLocationService extends Service implements LocationListener {
     }
 
     private Notification buildNotification(String title, String body) {
+        return buildNotification(title, body, false);
+    }
+
+    private Notification buildNotification(String title, String body, boolean alertPriority) {
         Intent intent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 this,
@@ -207,13 +231,13 @@ public class SafetyLocationService extends Service implements LocationListener {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 
-        return new Notification.Builder(this, CHANNEL_ID)
+        return new Notification.Builder(this, alertPriority ? ALERT_CHANNEL_ID : CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
-                .setPriority(Notification.PRIORITY_HIGH)
+                .setPriority(alertPriority ? Notification.PRIORITY_HIGH : Notification.PRIORITY_LOW)
                 .setCategory(Notification.CATEGORY_STATUS)
                 .build();
     }
@@ -224,9 +248,17 @@ public class SafetyLocationService extends Service implements LocationListener {
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
                 "Road safety monitoring",
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW
         );
         channel.setDescription("Live GPS risk warnings for known danger zones.");
         notificationManager.createNotificationChannel(channel);
+
+        NotificationChannel alertChannel = new NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "Road safety alerts",
+                NotificationManager.IMPORTANCE_HIGH
+        );
+        alertChannel.setDescription("High priority alerts for app-user and road risks.");
+        notificationManager.createNotificationChannel(alertChannel);
     }
 }
