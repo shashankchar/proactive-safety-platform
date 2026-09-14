@@ -146,10 +146,32 @@ public class SafetyMapView extends View {
     }
 
     private void drawCooperativeThreat(Canvas canvas, int width, int height) {
-        if (cooperativeAlert == null || !cooperativeAlert.present) return;
+        if (cooperativeAlert == null) return;
+
+        if (cooperativeAlert.nearbyVehicles != null) {
+            for (NearbyVehicle vehicle : cooperativeAlert.nearbyVehicles) {
+                drawNearbyVehicle(canvas, width, height, vehicle, cooperativeAlert.present && cooperativeAlert.otherVehicleId.equals(vehicle.vehicleId));
+            }
+        }
+
+        if (!cooperativeAlert.present) return;
 
         float centerX = width * 0.52f;
-        float centerY = height * 0.48f;
+        float centerY = height * 0.72f;
+
+        if (cooperativeAlert.hasOtherLocation) {
+            float[] point = relativePoint(cooperativeAlert.otherLatitude, cooperativeAlert.otherLongitude, width, height);
+            if (point != null) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(6));
+                paint.setStrokeCap(Paint.Cap.ROUND);
+                paint.setColor(Color.rgb(255, 77, 77));
+                canvas.drawLine(point[0], point[1], centerX, centerY, paint);
+                return;
+            }
+        }
+
+        centerY = height * 0.48f;
         float vehicleX = centerX + dp(120);
         float vehicleY = centerY;
 
@@ -180,6 +202,44 @@ public class SafetyMapView extends View {
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setColor(Color.rgb(255, 77, 77));
         canvas.drawLine(vehicleX, vehicleY, centerX, centerY, paint);
+    }
+
+    private void drawNearbyVehicle(Canvas canvas, int width, int height, NearbyVehicle vehicle, boolean danger) {
+        float[] point = relativePoint(vehicle.latitude, vehicle.longitude, width, height);
+        if (point == null) return;
+
+        float x = point[0];
+        float y = point[1];
+        float rotation = vehicle.hasHeading ? (float) vehicle.headingDeg - (location != null && location.hasBearing() ? location.getBearing() : 0f) : 0f;
+        int color = danger ? Color.rgb(255, 77, 77) : Color.rgb(255, 204, 77);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(withAlpha(color, danger ? 85 : 55));
+        canvas.drawCircle(x, y, dp(danger ? 34 : 28), paint);
+
+        canvas.save();
+        canvas.rotate(rotation, x, y);
+        path.reset();
+        path.moveTo(x, y - dp(22));
+        path.lineTo(x - dp(12), y + dp(18));
+        path.lineTo(x, y + dp(10));
+        path.lineTo(x + dp(12), y + dp(18));
+        path.close();
+        paint.setColor(color);
+        canvas.drawPath(path, paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(dp(2));
+        paint.setColor(Color.WHITE);
+        canvas.drawPath(path, paint);
+        canvas.restore();
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setTextSize(dp(10));
+        paint.setFakeBoldText(true);
+        paint.setColor(Color.WHITE);
+        String label = vehicle.speedKmh + " km/h";
+        canvas.drawText(label, x - dp(18), y + dp(36), paint);
+        paint.setFakeBoldText(false);
     }
 
     private void drawStatus(Canvas canvas, int width, int height) {
@@ -220,6 +280,27 @@ public class SafetyMapView extends View {
 
     private int withAlpha(int color, int alpha) {
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private float[] relativePoint(double latitude, double longitude, int width, int height) {
+        if (location == null) return null;
+
+        float[] result = new float[2];
+        Location.distanceBetween(
+                location.getLatitude(),
+                location.getLongitude(),
+                latitude,
+                longitude,
+                result
+        );
+
+        float radarMeters = 250f;
+        float maxRadius = Math.min(width, height) * 0.38f;
+        float clamped = Math.min(result[0], radarMeters);
+        double angle = Math.toRadians(result[1] - (location.hasBearing() ? location.getBearing() : 0));
+        float x = width * 0.52f + (float) Math.sin(angle) * (clamped / radarMeters) * maxRadius;
+        float y = height * 0.72f - (float) Math.cos(angle) * (clamped / radarMeters) * maxRadius;
+        return new float[]{x, y};
     }
 
     private int dp(int value) {
