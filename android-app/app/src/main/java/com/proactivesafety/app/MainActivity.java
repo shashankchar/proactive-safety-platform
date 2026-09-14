@@ -30,7 +30,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private static final int NOTIFICATION_REQUEST = 4002;
 
     private LocationManager locationManager;
-    private SafetyMapView safetyMapView;
+    private RealMapView realMapView;
     private TextView levelView;
     private TextView scoreView;
     private TextView speedView;
@@ -134,13 +134,13 @@ public class MainActivity extends android.app.Activity implements LocationListen
         header.addView(settingsButton);
         root.addView(text("Live GPS + app-to-app cooperative safety", 13, Color.rgb(167, 198, 186), false));
 
-        safetyMapView = new SafetyMapView(this);
+        realMapView = new RealMapView(this);
         LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(275)
         );
         mapParams.setMargins(0, dp(12), 0, dp(10));
-        root.addView(safetyMapView, mapParams);
+        root.addView(realMapView, mapParams);
 
         levelView = compactHero("LOW", Color.rgb(90, 211, 157));
         root.addView(levelView);
@@ -292,14 +292,18 @@ public class MainActivity extends android.app.Activity implements LocationListen
         container.setPadding(dp(4), dp(6), dp(4), 0);
 
         EditText serverInput = dialogInput("Backend URL", CooperativeSafetyClient.serverUrl(this));
+        EditText olaInput = dialogInput("Ola Maps API Key", CooperativeSafetyClient.olaApiKey(this));
         container.addView(serverInput);
+        container.addView(olaInput);
 
         new AlertDialog.Builder(this)
                 .setTitle("App Settings")
                 .setView(container)
                 .setPositiveButton("Save", (dialog, which) -> {
                     CooperativeSafetyClient.saveServerUrl(this, serverInput.getText().toString());
+                    CooperativeSafetyClient.saveOlaApiKey(this, olaInput.getText().toString());
                     statusView.setText("Settings saved. Checking backend.");
+                    if (realMapView != null) realMapView.reloadMap();
                     testBackendConnection();
                 })
                 .setNegativeButton("Cancel", null)
@@ -418,8 +422,8 @@ public class MainActivity extends android.app.Activity implements LocationListen
         distanceView.setText("Distance to Zone\n--");
         cooperativeView.setText("App-to-App Cooperative Alert\nWaiting for live app users.");
         factorView.setText("Why warning happens\n--");
-        if (safetyMapView != null) {
-            safetyMapView.update(null, null, null, monitoring);
+        if (realMapView != null) {
+            realMapView.update(null, null, null, monitoring);
         }
     }
 
@@ -446,9 +450,9 @@ public class MainActivity extends android.app.Activity implements LocationListen
         ));
 
         long now = System.currentTimeMillis();
-        if (safetyMapView != null && now - lastMapRenderAt >= 300L) {
+        if (realMapView != null && now - lastMapRenderAt >= 300L) {
             lastMapRenderAt = now;
-            safetyMapView.update(location, assessment, assessment.cooperativeAlert, monitoring);
+            realMapView.update(location, assessment, assessment.cooperativeAlert, monitoring);
         }
     }
 
@@ -500,8 +504,8 @@ public class MainActivity extends android.app.Activity implements LocationListen
         if (assessment != null) {
             assessment.cooperativeAlert = alert;
         }
-        if (safetyMapView != null) {
-            safetyMapView.update(lastLocation, assessment, alert, monitoring);
+        if (realMapView != null) {
+            realMapView.update(lastLocation, assessment, alert, monitoring);
         }
     }
 
