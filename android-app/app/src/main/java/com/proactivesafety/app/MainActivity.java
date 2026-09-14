@@ -399,6 +399,8 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private long cooperativeIntervalMs(Location location) {
         int speedKmh = RiskEngine.speedKmh(location);
         if (speedKmh < 5) return 5000L;
+        if (speedKmh < 20) return 2000L;
+        if (speedKmh >= 60) return 500L;
         return 1000L;
     }
 
@@ -448,7 +450,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
         ));
 
         long now = System.currentTimeMillis();
-        if (realMapView != null && now - lastMapRenderAt >= 500L) {
+        if (realMapView != null && now - lastMapRenderAt >= 300L) {
             lastMapRenderAt = now;
             realMapView.update(location, assessment, assessment.cooperativeAlert, monitoring);
         }

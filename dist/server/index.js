@@ -2,6 +2,7 @@ const STALE_AFTER_MS = 20_000;
 const MAX_CONFLICT_SECONDS = 30;
 const CRITICAL_CONFLICT_SECONDS = 8;
 const MAX_MISS_DISTANCE_METERS = 60;
+const NEARBY_COMPARE_RADIUS_METERS = 1_200;
 const liveVehicles = new Map();
 const liveSockets = new Map();
 
@@ -124,6 +125,11 @@ function isSameDirection(self, other) {
   return difference !== null && difference < 45;
 }
 
+function distanceMetersBetween(self, other) {
+  const relativePosition = projectRelativeMeters(self, other);
+  return Math.hypot(relativePosition.x, relativePosition.y);
+}
+
 function closestApproachAlert(self, other) {
   if (isSameDirection(self, other)) return null;
 
@@ -180,6 +186,7 @@ function findAlertsForVehicle(self, vehicles, now = Date.now()) {
   for (const other of vehicles) {
     if (other.vehicleId === self.vehicleId) continue;
     if (now - other.updatedAt > STALE_AFTER_MS) continue;
+    if (distanceMetersBetween(self, other) > NEARBY_COMPARE_RADIUS_METERS) continue;
     const pathAlert = closestApproachAlert(self, other);
     if (pathAlert) alerts.push(pathAlert);
   }
@@ -189,6 +196,8 @@ function findAlertsForVehicle(self, vehicles, now = Date.now()) {
 function nearbyVehiclesFor(vehicle, vehicles, now) {
   return vehicles
     .filter((item) => item.vehicleId !== vehicle.vehicleId)
+    .filter((item) => now - item.updatedAt <= STALE_AFTER_MS)
+    .filter((item) => distanceMetersBetween(vehicle, item) <= NEARBY_COMPARE_RADIUS_METERS)
     .map((item) => ({
       vehicleId: item.vehicleId,
       latitude: item.latitude,
