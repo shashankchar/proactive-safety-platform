@@ -10,6 +10,7 @@ final class CooperativeAlert {
     final String message;
     final String otherVehicleId;
     final String direction;
+    final int distanceMeters;
     final int closingSpeedKmh;
     final double secondsToConflict;
     final int activeVehicles;
@@ -25,6 +26,7 @@ final class CooperativeAlert {
             String message,
             String otherVehicleId,
             String direction,
+            int distanceMeters,
             int closingSpeedKmh,
             double secondsToConflict,
             int activeVehicles,
@@ -39,6 +41,7 @@ final class CooperativeAlert {
         this.message = message;
         this.otherVehicleId = otherVehicleId;
         this.direction = direction;
+        this.distanceMeters = distanceMeters;
         this.closingSpeedKmh = closingSpeedKmh;
         this.secondsToConflict = secondsToConflict;
         this.activeVehicles = activeVehicles;
@@ -53,6 +56,6 @@ final class CooperativeAlert {
     }
 
     static CooperativeAlert none(int activeVehicles, List<NearbyVehicle> nearbyVehicles) {
-        return new CooperativeAlert(false, "LOW", 0, "No app-user conflict detected.", "", "", 0, 0, activeVehicles, 0, 0, false, nearbyVehicles);
+        return new CooperativeAlert(false, "LOW", 0, "No app-user conflict detected.", "", "", 0, 0, 0, activeVehicles, 0, 0, false, nearbyVehicles);
     }
 }
