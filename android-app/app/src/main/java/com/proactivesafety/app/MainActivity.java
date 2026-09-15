@@ -5,8 +5,6 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -19,9 +17,7 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -32,18 +28,6 @@ import java.util.Locale;
 public class MainActivity extends android.app.Activity implements LocationListener {
     private static final int LOCATION_REQUEST = 4001;
     private static final int NOTIFICATION_REQUEST = 4002;
-    private static final int COLOR_BG = Color.rgb(7, 19, 15);
-    private static final int COLOR_SURFACE = Color.rgb(16, 35, 29);
-    private static final int COLOR_SURFACE_ALT = Color.rgb(15, 50, 54);
-    private static final int COLOR_TEAL = Color.rgb(41, 199, 164);
-    private static final int COLOR_SAFE = Color.rgb(90, 211, 157);
-    private static final int COLOR_CAUTION = Color.rgb(255, 204, 77);
-    private static final int COLOR_HIGH = Color.rgb(255, 145, 77);
-    private static final int COLOR_DANGER = Color.rgb(255, 77, 77);
-    private static final int COLOR_TEXT = Color.WHITE;
-    private static final int COLOR_TEXT_SECONDARY = Color.rgb(167, 184, 177);
-    private static final int COLOR_MUTED = Color.rgb(115, 132, 125);
-    private static final int COLOR_BORDER = Color.rgb(41, 66, 58);
 
     private LocationManager locationManager;
     private RealMapView realMapView;
@@ -56,23 +40,10 @@ public class MainActivity extends android.app.Activity implements LocationListen
     private TextView actionView;
     private TextView factorView;
     private TextView statusView;
-    private TextView speedValueView;
-    private TextView nearbyUsersView;
-    private TextView conflictDistanceView;
-    private TextView conflictTitleView;
-    private TextView conflictMetaView;
-    private TextView riskPillView;
-    private TextView actionTitleView;
-    private TextView actionMessageView;
-    private TextView actionMetaView;
-    private View conflictBanner;
-    private View actionPanel;
     private Button monitorButton;
     private boolean monitoring = false;
-    private boolean cloudConnected = false;
     private long lastCooperativePublishAt = 0L;
     private long lastMapRenderAt = 0L;
-    private CooperativeAlert lastCooperativeAlert;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Location lastLocation;
     private final Runnable heartbeat = new Runnable() {
@@ -109,7 +80,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
     public void onLocationChanged(Location location) {
         lastLocation = location;
         SafetyAssessment assessment = RiskEngine.assess(location);
-        assessment.cooperativeAlert = lastCooperativeAlert;
         renderAssessment(location, assessment);
         long now = System.currentTimeMillis();
         if (now - lastCooperativePublishAt >= cooperativeIntervalMs(location)) {
@@ -125,7 +95,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
     @Override
     public void onProviderDisabled(String provider) {
         if (!isAnyLocationProviderEnabled()) {
-            setConnectionStatus(false, "GPS off");
+            statusView.setText("Phone location is off. Enable Location/GPS for live safety monitoring.");
         }
     }
 
@@ -134,152 +104,82 @@ public class MainActivity extends android.app.Activity implements LocationListen
     }
 
     private View buildUi() {
-        FrameLayout screen = new FrameLayout(this);
-        screen.setBackgroundColor(COLOR_BG);
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(Color.rgb(7, 19, 15));
 
-        realMapView = new RealMapView(this);
-        screen.addView(realMapView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(false);
+        screen.addView(scrollView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
         ));
 
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(12), dp(8), dp(10), dp(8));
-        topBar.setBackground(createRoundedBackground(Color.argb(235, 16, 35, 29), dp(20), 0, 0));
-        topBar.setElevation(dp(6));
-        FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                dp(64)
-        );
-        topParams.setMargins(dp(14), getStatusBarHeight() + dp(8), dp(14), 0);
-        screen.addView(topBar, topParams);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(22, getStatusBarHeight() + 10, 22, 14);
+        scrollView.addView(root);
 
-        TextView badge = text("PS", 12, COLOR_BG, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(createRoundedBackground(COLOR_TEAL, dp(16), 0, 0));
-        topBar.addView(badge, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(header, matchWrap());
 
-        LinearLayout titleBlock = new LinearLayout(this);
-        titleBlock.setOrientation(LinearLayout.VERTICAL);
-        titleBlock.setPadding(dp(10), 0, dp(8), 0);
-        topBar.addView(titleBlock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        titleBlock.addView(text("Proactive Safety", 18, COLOR_TEXT, true));
-        statusView = text("Checking", 11, COLOR_TEXT_SECONDARY, true);
-        titleBlock.addView(statusView);
+        TextView title = text("PROACTIVE SAFETY", 22, Color.WHITE, true);
+        header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        monitorButton = hudButton("Start", COLOR_TEAL, COLOR_BG);
-        monitorButton.setOnClickListener(view -> toggleMonitoring());
-        topBar.addView(monitorButton, new LinearLayout.LayoutParams(dp(70), dp(42)));
-
-        Button settingsButton = hudButton("Settings", Color.argb(215, 15, 50, 54), COLOR_TEXT);
-        settingsButton.setContentDescription("Open settings");
+        Button settingsButton = smallButton("Settings");
         settingsButton.setOnClickListener(view -> showSettingsDialog());
-        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(78), dp(42));
-        settingsParams.setMargins(dp(8), 0, 0, 0);
-        topBar.addView(settingsButton, settingsParams);
+        header.addView(settingsButton);
+        root.addView(text("Live GPS + app-to-app cooperative safety", 13, Color.rgb(167, 198, 186), false));
 
-        LinearLayout warning = new LinearLayout(this);
-        warning.setOrientation(LinearLayout.VERTICAL);
-        warning.setPadding(dp(16), dp(10), dp(16), dp(10));
-        warning.setBackground(createRoundedBackground(Color.argb(235, 16, 35, 29), dp(20), dp(1), COLOR_BORDER));
-        warning.setElevation(dp(8));
-        warning.setVisibility(View.GONE);
-        conflictBanner = warning;
-        conflictTitleView = text("VEHICLE APPROACHING", 18, COLOR_TEXT, true);
-        conflictMetaView = text("--", 13, COLOR_TEXT_SECONDARY, true);
-        warning.addView(conflictTitleView);
-        warning.addView(conflictMetaView);
-        FrameLayout.LayoutParams warningParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
+        realMapView = new RealMapView(this);
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(275)
         );
-        warningParams.setMargins(dp(18), getStatusBarHeight() + dp(84), dp(18), 0);
-        screen.addView(warning, warningParams);
+        mapParams.setMargins(0, dp(12), 0, dp(10));
+        root.addView(realMapView, mapParams);
 
-        LinearLayout speedHud = new LinearLayout(this);
-        speedHud.setOrientation(LinearLayout.VERTICAL);
-        speedHud.setGravity(Gravity.CENTER);
-        speedHud.setPadding(dp(8), dp(8), dp(8), dp(8));
-        speedHud.setBackground(createRoundedBackground(Color.argb(220, 7, 19, 15), dp(24), dp(1), COLOR_BORDER));
-        speedHud.setElevation(dp(6));
-        speedValueView = text("--", 34, COLOR_TEXT, true);
-        speedValueView.setGravity(Gravity.CENTER);
-        TextView speedUnit = text("km/h", 12, COLOR_TEXT_SECONDARY, true);
-        speedUnit.setGravity(Gravity.CENTER);
-        speedHud.addView(speedValueView);
-        speedHud.addView(speedUnit);
-        FrameLayout.LayoutParams speedParams = new FrameLayout.LayoutParams(dp(96), dp(96));
-        speedParams.gravity = Gravity.START | Gravity.BOTTOM;
-        speedParams.setMargins(dp(18), 0, 0, dp(184));
-        screen.addView(speedHud, speedParams);
+        levelView = compactHero("LOW", Color.rgb(90, 211, 157));
+        root.addView(levelView);
 
-        nearbyUsersView = text("0 nearby", 13, COLOR_TEXT, true);
-        nearbyUsersView.setGravity(Gravity.CENTER);
-        nearbyUsersView.setPadding(dp(12), 0, dp(12), 0);
-        nearbyUsersView.setBackground(createRoundedBackground(Color.argb(220, 15, 50, 54), dp(18), dp(1), COLOR_BORDER));
-        FrameLayout.LayoutParams nearbyParams = new FrameLayout.LayoutParams(dp(118), dp(38));
-        nearbyParams.gravity = Gravity.START | Gravity.BOTTOM;
-        nearbyParams.setMargins(dp(18), 0, 0, dp(140));
-        screen.addView(nearbyUsersView, nearbyParams);
+        GridLayout metrics = new GridLayout(this);
+        metrics.setColumnCount(2);
+        metrics.setUseDefaultMargins(false);
+        root.addView(metrics, matchWrap());
 
-        Button sosButton = hudButton("SOS", COLOR_DANGER, COLOR_TEXT);
-        sosButton.setTextSize(17);
-        sosButton.setContentDescription("Emergency SOS");
-        sosButton.setOnClickListener(view -> handleSosClick());
-        FrameLayout.LayoutParams sosParams = new FrameLayout.LayoutParams(dp(76), dp(64));
-        sosParams.gravity = Gravity.END | Gravity.BOTTOM;
-        sosParams.setMargins(0, 0, dp(18), dp(156));
-        screen.addView(sosButton, sosParams);
+        scoreView = metricPanel("Risk Score", "--");
+        speedView = metricPanel("Speed", "--");
+        zoneView = metricPanel("Risk Zone", "--");
+        distanceView = metricPanel("Distance", "--");
+        metrics.addView(scoreView);
+        metrics.addView(speedView);
+        metrics.addView(zoneView);
+        metrics.addView(distanceView);
 
-        LinearLayout bottomPanel = new LinearLayout(this);
-        bottomPanel.setOrientation(LinearLayout.VERTICAL);
-        bottomPanel.setPadding(dp(18), dp(14), dp(18), dp(14));
-        bottomPanel.setBackground(createRoundedBackground(Color.argb(238, 16, 35, 29), dp(26), dp(1), COLOR_BORDER));
-        bottomPanel.setElevation(dp(10));
-        actionPanel = bottomPanel;
+        cooperativeView = panel("App-to-App Alert", "Waiting for live app users.");
+        actionView = alertPanel("Recommended Action", "Start monitoring to use GPS safety alerts.");
+        factorView = panel("Why warning happens", "--");
+        statusView = text("Location permission is required.", 14, Color.rgb(167, 198, 186), false);
 
-        LinearLayout riskRow = new LinearLayout(this);
-        riskRow.setOrientation(LinearLayout.HORIZONTAL);
-        riskRow.setGravity(Gravity.CENTER_VERTICAL);
-        bottomPanel.addView(riskRow, matchWrap());
+        root.addView(cooperativeView);
+        root.addView(actionView);
+        root.addView(factorView);
+        root.addView(statusView);
 
-        riskPillView = text("SAFE", 13, COLOR_SAFE, true);
-        riskPillView.setGravity(Gravity.CENTER);
-        riskPillView.setPadding(dp(12), 0, dp(12), 0);
-        riskPillView.setBackground(createRoundedBackground(Color.argb(45, 90, 211, 157), dp(15), dp(1), COLOR_SAFE));
-        riskRow.addView(riskPillView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(32)));
+        monitorButton = button("Start GPS Monitoring", Color.rgb(41, 199, 164), 64);
+        monitorButton.setOnClickListener(view -> toggleMonitoring());
+        screen.addView(monitorButton);
 
-        conflictDistanceView = text("No conflict", 13, COLOR_TEXT_SECONDARY, true);
-        conflictDistanceView.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        riskRow.addView(conflictDistanceView, new LinearLayout.LayoutParams(0, dp(32), 1f));
+        Button sosButton = button("SOS Emergency", Color.rgb(255, 77, 77), 58);
+        sosButton.setOnClickListener(view -> showSosDialog());
+        root.addView(sosButton);
 
-        actionTitleView = text("READY", 24, COLOR_TEXT, true);
-        actionTitleView.setPadding(0, dp(8), 0, 0);
-        bottomPanel.addView(actionTitleView);
-        actionMessageView = text("Start monitoring for live safety alerts", 15, COLOR_TEXT_SECONDARY, false);
-        bottomPanel.addView(actionMessageView);
-        actionMetaView = text("", 12, COLOR_MUTED, false);
-        bottomPanel.addView(actionMetaView);
-
-        FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        bottomParams.gravity = Gravity.BOTTOM;
-        bottomParams.setMargins(dp(14), 0, dp(14), dp(18));
-        screen.addView(bottomPanel, bottomParams);
-
-        // Kept for compatibility with existing render code; not attached to the main HUD.
-        levelView = riskPillView;
-        scoreView = text("", 1, Color.TRANSPARENT, false);
-        speedView = speedValueView;
-        zoneView = nearbyUsersView;
-        distanceView = conflictDistanceView;
-        cooperativeView = text("", 1, Color.TRANSPARENT, false);
-        actionView = actionMessageView;
-        factorView = text("", 1, Color.TRANSPARENT, false);
+        TextView note = text("App users share GPS, speed, and heading through your backend.", 12, Color.rgb(167, 198, 186), false);
+        note.setPadding(0, 24, 0, 0);
+        root.addView(note);
 
         return screen;
     }
@@ -352,20 +252,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
         return button;
     }
 
-    private Button hudButton(String label, int fillColor, int textColor) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setTextColor(textColor);
-        button.setTextSize(12);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setAllCaps(false);
-        button.setMinHeight(0);
-        button.setMinimumHeight(0);
-        button.setPadding(dp(8), 0, dp(8), 0);
-        button.setBackground(createRoundedBackground(fillColor, dp(18), dp(1), Color.argb(90, 255, 255, 255)));
-        return button;
-    }
-
     private Button smallButton(String label) {
         Button button = new Button(this);
         button.setText(label);
@@ -400,66 +286,23 @@ public class MainActivity extends android.app.Activity implements LocationListen
         return dp(24);
     }
 
-    private GradientDrawable createRoundedBackground(int color, int radiusPx, int strokeWidthPx, int strokeColor) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(radiusPx);
-        if (strokeWidthPx > 0) drawable.setStroke(strokeWidthPx, strokeColor);
-        return drawable;
-    }
-
     private void showSettingsDialog() {
-        ScrollView settingsScroll = new ScrollView(this);
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(dp(8), dp(8), dp(8), 0);
-        settingsScroll.addView(container);
+        container.setPadding(dp(4), dp(6), dp(4), 0);
 
-        container.addView(settingsHeader("Connection"));
         EditText serverInput = dialogInput("Backend URL", CooperativeSafetyClient.serverUrl(this));
-        container.addView(serverInput);
-
-        Button testButton = smallButton("Test Cloud Connection");
-        testButton.setOnClickListener(view -> testBackendConnection());
-        container.addView(testButton);
-
-        container.addView(settingsLine("Current cloud status", cloudConnected ? "Connected" : "Not connected"));
-        container.addView(settingsLine("Data refresh interval", "Adaptive: 0.5 sec to 5 sec"));
-
-        container.addView(settingsHeader("Map"));
         EditText olaInput = dialogInput("Ola Maps API Key", CooperativeSafetyClient.olaApiKey(this));
+        container.addView(serverInput);
         container.addView(olaInput);
-
-        container.addView(settingsHeader("Location and device"));
-        container.addView(settingsLine("GPS Status", isAnyLocationProviderEnabled() ? "Active" : "Off"));
-        container.addView(settingsLine("Vehicle ID", CooperativeSafetyClient.vehicleId(this)));
-        if (lastLocation != null) {
-            container.addView(settingsLine("Raw latitude", String.format(Locale.US, "%.6f", lastLocation.getLatitude())));
-            container.addView(settingsLine("Raw longitude", String.format(Locale.US, "%.6f", lastLocation.getLongitude())));
-            container.addView(settingsLine("Location accuracy", lastLocation.hasAccuracy() ? String.format(Locale.US, "%.0f m", lastLocation.getAccuracy()) : "Unknown"));
-        } else {
-            container.addView(settingsLine("Raw location", "Waiting for GPS"));
-        }
-
-        container.addView(settingsHeader("Alert preferences"));
-        container.addView(settingsCheck("Alert sound", true));
-        container.addView(settingsCheck("Vibration", true));
-        container.addView(settingsCheck("Voice alert", true));
-
-        container.addView(settingsHeader("Developer"));
-        container.addView(settingsCheck("Debug mode", false));
-        container.addView(settingsLine("Raw risk score", "Hidden on main UI"));
-
-        container.addView(settingsHeader("About"));
-        container.addView(settingsLine("About", "App-to-app cooperative safety using GPS, speed, heading and cloud sharing."));
 
         new AlertDialog.Builder(this)
                 .setTitle("App Settings")
-                .setView(settingsScroll)
+                .setView(container)
                 .setPositiveButton("Save", (dialog, which) -> {
                     CooperativeSafetyClient.saveServerUrl(this, serverInput.getText().toString());
                     CooperativeSafetyClient.saveOlaApiKey(this, olaInput.getText().toString());
-                    setConnectionStatus(false, "Checking");
+                    statusView.setText("Settings saved. Checking backend.");
                     if (realMapView != null) realMapView.reloadMap();
                     testBackendConnection();
                 })
@@ -480,28 +323,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
         params.setMargins(0, 0, 0, dp(10));
         input.setLayoutParams(params);
         return input;
-    }
-
-    private TextView settingsLine(String label, String value) {
-        TextView view = text(label + "\n" + value, 13, Color.rgb(24, 35, 33), false);
-        view.setPadding(0, dp(6), 0, dp(8));
-        return view;
-    }
-
-    private TextView settingsHeader(String label) {
-        TextView view = text(label, 12, Color.rgb(15, 50, 54), true);
-        view.setPadding(0, dp(12), 0, dp(4));
-        return view;
-    }
-
-    private CheckBox settingsCheck(String label, boolean checked) {
-        CheckBox box = new CheckBox(this);
-        box.setText(label);
-        box.setTextSize(13);
-        box.setChecked(checked);
-        box.setTextColor(Color.rgb(24, 35, 33));
-        box.setPadding(0, dp(2), 0, dp(2));
-        return box;
     }
 
     private void toggleMonitoring() {
@@ -526,8 +347,8 @@ public class MainActivity extends android.app.Activity implements LocationListen
 
     private void startMonitoring() {
         monitoring = true;
-        monitorButton.setText("Stop");
-        setConnectionStatus(cloudConnected, cloudConnected ? "Connected" : "Checking");
+        monitorButton.setText("Stop GPS Monitoring");
+        statusView.setText("GPS monitoring active. Keep location on.");
 
         Intent intent = new Intent(this, SafetyLocationService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -543,8 +364,8 @@ public class MainActivity extends android.app.Activity implements LocationListen
 
     private void stopMonitoring() {
         monitoring = false;
-        monitorButton.setText("Start");
-        setConnectionStatus(cloudConnected, cloudConnected ? "Connected" : "Paused");
+        monitorButton.setText("Start GPS Monitoring");
+        statusView.setText("GPS monitoring stopped.");
         stopService(new Intent(this, SafetyLocationService.class));
         stopLocalUpdates();
         handler.removeCallbacks(heartbeat);
@@ -564,7 +385,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
         }
 
         if (!requested) {
-            setConnectionStatus(false, "GPS off");
+            statusView.setText("Phone location is off. Enable Location/GPS, then restart monitoring.");
             return;
         }
 
@@ -594,30 +415,39 @@ public class MainActivity extends android.app.Activity implements LocationListen
     }
 
     private void renderEmpty() {
-        applyRiskTheme("LOW");
+        levelView.setText("LOW");
         scoreView.setText("Risk Score\n--");
-        speedValueView.setText("--");
-        nearbyUsersView.setText("-- nearby");
-        conflictDistanceView.setText("No conflict");
-        if (conflictBanner != null) conflictBanner.setVisibility(View.GONE);
-        actionTitleView.setText("READY");
-        actionMessageView.setText("Start monitoring for live safety alerts");
-        actionMetaView.setText("");
-        monitorButton.setText("Start");
-        setConnectionStatus(cloudConnected, cloudConnected ? "Connected" : "Checking");
+        speedView.setText("Current Speed\n--");
+        zoneView.setText("Nearest Risk Zone\n--");
+        distanceView.setText("Distance to Zone\n--");
+        cooperativeView.setText("App-to-App Cooperative Alert\nWaiting for live app users.");
+        factorView.setText("Why warning happens\n--");
         if (realMapView != null) {
             realMapView.update(null, null, null, monitoring);
         }
     }
 
     private void renderAssessment(Location location, SafetyAssessment assessment) {
-        String effectiveLevel = moreSevereLevel(assessment.level, assessment.cooperativeAlert);
-        applyRiskTheme(effectiveLevel);
-        speedValueView.setText(String.valueOf(Math.max(0, RiskEngine.speedKmh(location))));
-        renderCooperativeMetrics(assessment.cooperativeAlert);
-        renderConflictBanner(assessment.cooperativeAlert, effectiveLevel);
-        renderActionPanel(effectiveLevel, assessment.action, assessment.cooperativeAlert);
-        setConnectionStatus(cloudConnected, cloudConnected ? "Connected" : "GPS Active");
+        int color = colorForLevel(assessment.level);
+        levelView.setText(assessment.level);
+        levelView.setTextColor(color);
+        scoreView.setText("Risk Score\n" + assessment.score + "/100");
+        speedView.setText("Current Speed\n" + RiskEngine.speedKmh(location) + " km/h");
+
+        if (assessment.nearestZone != null) {
+            zoneView.setText("Nearest Risk Zone\n" + assessment.nearestZone.name);
+            distanceView.setText("Distance to Zone\n" + String.format(Locale.US, "%.0f m", assessment.distanceMeters));
+        }
+
+        actionView.setText("Recommended Action\n" + assessment.action);
+        factorView.setText("Why warning happens\n" + String.join("\n", assessment.factors));
+
+        statusView.setText(String.format(
+                Locale.US,
+                "GPS: %.6f, %.6f",
+                location.getLatitude(),
+                location.getLongitude()
+        ));
 
         long now = System.currentTimeMillis();
         if (realMapView != null && now - lastMapRenderAt >= 300L) {
@@ -630,15 +460,11 @@ public class MainActivity extends android.app.Activity implements LocationListen
         new Thread(() -> {
             try {
                 CooperativeAlert alert = CooperativeSafetyClient.publishLocation(this, location);
-                runOnUiThread(() -> {
-                    setConnectionStatus(true, "Connected");
-                    renderCooperativeAlert(alert);
-                });
+                runOnUiThread(() -> renderCooperativeAlert(alert));
             } catch (Exception error) {
-                runOnUiThread(() -> {
-                    setConnectionStatus(false, "Cloud Lost");
-                    cooperativeView.setText("App-to-App Alert\nCloud connection lost. App-user alerts paused.");
-                });
+                runOnUiThread(() -> cooperativeView.setText(
+                        "App-to-App Alert\nBackend not reachable\n" + shortError(error)
+                ));
             }
         }).start();
     }
@@ -647,21 +473,13 @@ public class MainActivity extends android.app.Activity implements LocationListen
         new Thread(() -> {
             try {
                 boolean ok = CooperativeSafetyClient.ping(this);
-                runOnUiThread(() -> setConnectionStatus(ok, ok ? "Connected" : "Cloud Lost"));
+                runOnUiThread(() -> statusView.setText(ok
+                        ? "Backend connected: " + CooperativeSafetyClient.serverUrl(this)
+                        : "Backend did not respond."));
             } catch (Exception error) {
-                runOnUiThread(() -> setConnectionStatus(false, "Cloud Lost"));
+                runOnUiThread(() -> statusView.setText("Backend failed: " + shortError(error)));
             }
         }).start();
-    }
-
-    private void setConnectionStatus(boolean connected, String label) {
-        cloudConnected = connected;
-        if (statusView == null) return;
-        statusView.setText((connected ? "● " : "● ") + label);
-        int warningColor = label.toLowerCase(Locale.US).contains("lost") || label.toLowerCase(Locale.US).contains("off")
-                ? Color.rgb(255, 77, 77)
-                : Color.rgb(255, 204, 77);
-        statusView.setTextColor(connected ? Color.rgb(90, 211, 157) : warningColor);
     }
 
     private String shortError(Exception error) {
@@ -673,191 +491,29 @@ public class MainActivity extends android.app.Activity implements LocationListen
     }
 
     private void renderCooperativeAlert(CooperativeAlert alert) {
-        lastCooperativeAlert = alert;
-        renderCooperativeMetrics(alert);
-        String localLevel = "LOW";
-        String localAction = "Continue with caution";
-        SafetyAssessment assessment = lastLocation == null ? null : RiskEngine.assess(lastLocation);
-        if (assessment != null) {
-            localLevel = assessment.level;
-            localAction = assessment.action;
-            assessment.cooperativeAlert = alert;
-        }
-        String effectiveLevel = moreSevereLevel(localLevel, alert);
-        applyRiskTheme(effectiveLevel);
-        renderConflictBanner(alert, effectiveLevel);
-        renderActionPanel(effectiveLevel, localAction, alert);
+        cooperativeView.setText("App-to-App Cooperative Alert\n" + CooperativeSafetyClient.describe(alert));
 
         if (alert != null && alert.present) {
+            levelView.setText(alert.level);
+            levelView.setTextColor(colorForLevel(alert.level));
             scoreView.setText("Risk Score\n" + Math.max(alert.score, 0) + "/100");
+            actionView.setText("Recommended Action\n" + alert.message);
         }
 
+        SafetyAssessment assessment = lastLocation == null ? null : RiskEngine.assess(lastLocation);
+        if (assessment != null) {
+            assessment.cooperativeAlert = alert;
+        }
         if (realMapView != null) {
             realMapView.update(lastLocation, assessment, alert, monitoring);
         }
     }
 
-    private void renderCooperativeMetrics(CooperativeAlert alert) {
-        int activeVehicles = alert == null ? 0 : alert.activeVehicles;
-        nearbyUsersView.setText(activeVehicles + " nearby");
-
-        if (alert == null) {
-            conflictDistanceView.setText("No conflict");
-            return;
-        }
-
-        if (!alert.present) {
-            conflictDistanceView.setText("No conflict");
-            return;
-        }
-
-        conflictDistanceView.setText(formatConflictDistance(alert));
-    }
-
-    private void renderConflictBanner(CooperativeAlert alert, String effectiveLevel) {
-        if (conflictBanner == null) return;
-        if (alert == null || !alert.present || severity(alert.level) < severity("MEDIUM")) {
-            conflictBanner.setVisibility(View.GONE);
-            return;
-        }
-
-        int accent = colorForLevel(alert.level);
-        String direction = safeDirection(alert.direction);
-        if ("CRITICAL".equals(normalizeLevel(alert.level))) {
-            conflictTitleView.setText("STOP - VEHICLE FROM " + direction.toUpperCase(Locale.US));
-        } else if ("HIGH".equals(normalizeLevel(alert.level))) {
-            conflictTitleView.setText("HIGH COLLISION RISK");
-        } else {
-            conflictTitleView.setText("VEHICLE APPROACHING");
-        }
-        String meta = formatConflictDistance(alert);
-        String seconds = formatSecondsToConflict(alert.secondsToConflict);
-        if (!seconds.isEmpty()) meta = meta + " | " + seconds;
-        conflictMetaView.setText(meta);
-        conflictTitleView.setTextColor(accent);
-        conflictBanner.setBackground(createRoundedBackground(Color.argb(238, 16, 35, 29), dp(20), dp(2), accent));
-        conflictBanner.setVisibility(View.VISIBLE);
-    }
-
-    private void renderActionPanel(String level, String localAction, CooperativeAlert alert) {
-        String normalized = normalizeLevel(level);
-        if (alert != null && alert.present && severity(alert.level) >= severity("MEDIUM")) {
-            if ("CRITICAL".equals(normalizeLevel(alert.level))) {
-                actionTitleView.setText("STOP NOW");
-                actionMessageView.setText("Do not enter the junction");
-            } else if ("HIGH".equals(normalizeLevel(alert.level))) {
-                actionTitleView.setText("SLOW DOWN");
-                actionMessageView.setText(shortAction(alert.message, "Collision path detected ahead"));
-            } else {
-                actionTitleView.setText("VEHICLE APPROACHING");
-                actionMessageView.setText(shortAction(alert.message, "Reduce speed and check your surroundings"));
-            }
-            actionMetaView.setText(formatConflictDistance(alert) + optionalSeconds(alert));
-            return;
-        }
-
-        if ("CRITICAL".equals(normalized)) {
-            actionTitleView.setText("STOP NOW");
-            actionMessageView.setText(shortAction(localAction, "Do not enter the danger area"));
-        } else if ("HIGH".equals(normalized)) {
-            actionTitleView.setText("SLOW DOWN");
-            actionMessageView.setText(shortAction(localAction, "High road risk ahead"));
-        } else if ("MEDIUM".equals(normalized)) {
-            actionTitleView.setText("CAUTION");
-            actionMessageView.setText(shortAction(localAction, "Reduce speed and stay alert"));
-        } else {
-            actionTitleView.setText("ROAD CLEAR");
-            actionMessageView.setText(monitoring ? "Continue with caution" : "Start monitoring for live safety alerts");
-        }
-        actionMetaView.setText("");
-    }
-
-    private void applyRiskTheme(String level) {
-        String normalized = normalizeLevel(level);
-        int color = colorForLevel(normalized);
-        String label;
-        if ("CRITICAL".equals(normalized)) label = "DANGER";
-        else if ("HIGH".equals(normalized)) label = "HIGH RISK";
-        else if ("MEDIUM".equals(normalized)) label = "CAUTION";
-        else label = "SAFE";
-
-        riskPillView.setText(label);
-        riskPillView.setTextColor(color);
-        riskPillView.setBackground(createRoundedBackground(Color.argb(55, Color.red(color), Color.green(color), Color.blue(color)), dp(15), dp(1), color));
-        if (actionPanel != null) {
-            actionPanel.setBackground(createRoundedBackground(Color.argb(238, 16, 35, 29), dp(26), dp(1), color));
-        }
-        nearbyUsersView.setTextColor(severity(normalized) >= severity("HIGH") ? color : COLOR_TEXT);
-    }
-
-    private String moreSevereLevel(String localLevel, CooperativeAlert alert) {
-        String cooperativeLevel = alert != null && alert.present ? alert.level : "LOW";
-        return severity(cooperativeLevel) > severity(localLevel) ? normalizeLevel(cooperativeLevel) : normalizeLevel(localLevel);
-    }
-
-    private int severity(String level) {
-        String normalized = normalizeLevel(level);
-        if ("CRITICAL".equals(normalized)) return 3;
-        if ("HIGH".equals(normalized)) return 2;
-        if ("MEDIUM".equals(normalized)) return 1;
-        return 0;
-    }
-
-    private String normalizeLevel(String level) {
-        if (level == null) return "LOW";
-        String upper = level.trim().toUpperCase(Locale.US);
-        if ("CRITICAL".equals(upper) || "HIGH".equals(upper) || "MEDIUM".equals(upper)) return upper;
-        return "LOW";
-    }
-
-    private String formatConflictDistance(CooperativeAlert alert) {
-        if (alert == null || !alert.present) return "No conflict";
-        int distanceMeters = alert.distanceMeters;
-        if (distanceMeters <= 0 && alert.hasOtherLocation && lastLocation != null) {
-            float[] result = new float[1];
-            Location.distanceBetween(
-                    lastLocation.getLatitude(),
-                    lastLocation.getLongitude(),
-                    alert.otherLatitude,
-                    alert.otherLongitude,
-                    result
-            );
-            distanceMeters = Math.round(result[0]);
-        }
-        String distance = distanceMeters > 0 ? distanceMeters + " m" : "--";
-        String direction = safeDirection(alert.direction);
-        return direction.isEmpty() ? distance : distance + " | from " + direction;
-    }
-
-    private String formatSecondsToConflict(double seconds) {
-        if (Double.isNaN(seconds) || Double.isInfinite(seconds) || seconds <= 0) return "";
-        return String.format(Locale.US, "%.0f sec", seconds);
-    }
-
-    private String optionalSeconds(CooperativeAlert alert) {
-        String seconds = alert == null ? "" : formatSecondsToConflict(alert.secondsToConflict);
-        return seconds.isEmpty() ? "" : " | " + seconds;
-    }
-
-    private String safeDirection(String direction) {
-        if (direction == null) return "";
-        String clean = direction.trim().toLowerCase(Locale.US).replace('_', '-');
-        if (clean.length() > 16) return "";
-        return clean;
-    }
-
-    private String shortAction(String message, String fallback) {
-        if (message == null || message.trim().isEmpty()) return fallback;
-        String clean = message.replace("CRITICAL:", "").replace("HIGH RISK:", "").trim();
-        return clean.length() > 62 ? fallback : clean;
-    }
-
     private int colorForLevel(String level) {
-        String normalized = normalizeLevel(level);
-        if ("CRITICAL".equals(normalized)) return COLOR_DANGER;
-        if ("HIGH".equals(normalized)) return COLOR_HIGH;
-        if ("MEDIUM".equals(normalized)) return COLOR_CAUTION;
-        return COLOR_SAFE;
+        if ("CRITICAL".equals(level)) return Color.rgb(255, 77, 77);
+        if ("HIGH".equals(level)) return Color.rgb(255, 145, 77);
+        if ("MEDIUM".equals(level)) return Color.rgb(255, 204, 77);
+        return Color.rgb(90, 211, 157);
     }
 
     private void showSosDialog() {
@@ -870,10 +526,6 @@ public class MainActivity extends android.app.Activity implements LocationListen
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
-    }
-
-    private void handleSosClick() {
-        showSosDialog();
     }
 
     private void requestNotificationPermission() {
@@ -890,7 +542,7 @@ public class MainActivity extends android.app.Activity implements LocationListen
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startMonitoring();
             } else {
-                setConnectionStatus(false, "GPS off");
+                statusView.setText("Location permission denied. Open settings to allow GPS safety monitoring.");
                 new AlertDialog.Builder(this)
                         .setTitle("Location Required")
                         .setMessage("Proactive Safety needs location permission to detect nearby road risk zones.")

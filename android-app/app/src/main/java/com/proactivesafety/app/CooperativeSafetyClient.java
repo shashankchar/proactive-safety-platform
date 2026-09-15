@@ -208,7 +208,6 @@ final class CooperativeSafetyClient {
                 alert.optString("message", "Nearby app-user vehicle conflict detected."),
                 otherVehicleId,
                 alert.optString("direction", ""),
-                alert.optInt("distanceMeters", 0),
                 alert.optInt("closingSpeedKmh", 0),
                 alert.optDouble("secondsToConflict", 0),
                 activeVehicles,
